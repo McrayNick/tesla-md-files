@@ -127,7 +127,7 @@ async function run() {
     console.error('[PLUGINS] Could not write the sync list.');
   }
 
-  console.log(`[PLUGINS] Synced ${synced.length}/${chosen.names.length} plugin file(s) from ${REPO}@${BRANCH}` + (failed.length ? `, ${failed.length} failed` : ''));
+  console.log(`[PLUGINS] Loaded ${synced.length}/${chosen.names.length} plugin files Successfully ` + (failed.length ? `, ${failed.length} failed` : ''));
   return { synced, failed };
 }
 
