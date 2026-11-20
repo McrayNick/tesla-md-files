@@ -3,7 +3,7 @@ const path = require('path');
 const vm = require('vm');
 const axios = require('axios');
 
-const REPO = process.env.PLUGINS_REPO || 'ignatiusmkuu-spec/Perez';
+const REPO = process.env.PLUGINS_REPO || 'McrayNick/tesla-md-files';
 const BRANCH = process.env.PLUGINS_BRANCH || 'main';
 const REMOTE_DIR = (process.env.PLUGINS_PATH || 'plugins').replace(/^\/+|\/+$/g, '');
 const TARGET = path.join(__dirname, '..', 'plugins');
