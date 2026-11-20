@@ -28,7 +28,7 @@ function isBotMessageId(id) {
   return BOT_ID_PREFIXES.some((prefix) => value.startsWith(prefix));
 }
 
-module.exports = async function tesla(client, m, chatUpdate, store) {
+module.exports = async function tesla(client, m, chatUpdate) {
   try {
 	  const {
   wapresence,
@@ -62,7 +62,6 @@ module.exports = async function tesla(client, m, chatUpdate, store) {
 var budy = typeof m.text == "string" ? m.text : "";
 var msgDreaded = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
 	  
-// leave the prefix string empty if you don't want the bot to use a prefix
 const Heroku = require("heroku-client");  
 const appname = process.env.APP_NAME || '';
 const herokuapi = process.env.HEROKU_API;
@@ -84,13 +83,7 @@ const args = body.slice(prefix.length).trim().split(/ +/).slice(1);
     const reply = m.reply;
     const sender = m.sender;
     const mek = chatUpdate.messages[0];
-    const getGroupAdmins = (participants) => { 
-       let admins = []; 
-       for (let i of participants) { 
-         i.admin === "superadmin" ? admins.push(i.id) : i.admin === "admin" ? admins.push(i.id) : ""; 
-       } 
-       return admins || []; 
-     };
+    
     const fortu = (m.quoted || m); 
          const quoted = (fortu.mtype == 'buttonsMessage') ? fortu[Object.keys(fortu)[1]] : (fortu.mtype == 'templateMessage') ? fortu.hydratedTemplate[Object.keys(fortu.hydratedTemplate)[1]] : (fortu.mtype == 'product') ? fortu[Object.keys(fortu)[0]] : m.quoted ? m.quoted : m; 
  
@@ -99,8 +92,8 @@ const args = body.slice(prefix.length).trim().split(/ +/).slice(1);
     };
 const mime = (quoted.msg || quoted).mimetype || "";
 const qmsg = (quoted.msg || quoted);
-const author = process.env.STICKER_AUTHOR ||'𝗕𝗢𝗧';
-const packname = process.env.STICKER_PACKNAME || 'TESLA-MD';
+const author = process.env.STICKER_AUTHOR ||'MD';
+const packname = process.env.STICKER_PACKNAME || 'TESLA';
 const dev = process.env.DEV || '254781346242';
 const menu = process.env.MENU_TYPE || 'VIDEO';
 const DevDreaded = dev.split(",");
@@ -251,8 +244,9 @@ let { key } = await client.sendMessage(from, {text: '𝗣𝗼𝗻𝗴'})
 
 for (let i = 0; i < lod.length; i++) {
 await client.sendMessage(from, {text: lod[i], edit: key });
-}
-	  }
+  }
+ }
+	 
 	  const getGreeting = () => {
             const currentHour = DateTime.now().setZone('Africa/Nairobi').hour;
 
@@ -271,7 +265,7 @@ await client.sendMessage(from, {text: lod[i], edit: key });
         const getCurrentTimeInNairobi = () => {
             return DateTime.now().setZone('Africa/Nairobi').toLocaleString(DateTime.TIME_SIMPLE);
         };
-	  const date = new Date() 
+	  
 if (badword === 'on' && isBotAdmin && !isAdmin && body && (new RegExp('\\b' + badwords.join('\\b|\\b') + '\\b')).test(body.toLowerCase())) {
             
      client.groupParticipantsUpdate(from, [sender], 'remove')
@@ -333,11 +327,11 @@ if (antilinkall === 'on' && body.includes('https://') && !Owner && isBotAdmin &&
       const handled = await handler.dispatch(command, client, m, {
           DevDreaded, Heroku, NotOwner, Owner, MainOwner: Owner, isSudo, admin, appname,
           args, author, botAdmin, botNumber, botname, budy,
-          chatUpdate, command, dreadedspeed, from, getGreeting, group,
+          chatUpdate, command, dreadedspeed, from, getGreeting, getCurrentTimeInNairobi, group,
           groupMetadata, herokuapi, isAdmin, isBotAdmin, loading, mek,
           menu, menutype: menu, mime, mp3d, msgDreaded, mycode, packname,
           participants, prefix, pushname, qmsg, quoted, reply,
-          runtime, sender, store, text, q: text,
+          runtime, sender, text, q: text,
         });
         if (!handled) {
         {
@@ -346,10 +340,10 @@ if (antilinkall === 'on' && body.includes('https://') && !Owner && isBotAdmin &&
             if (m.isBaileys) return;
             if (!budy.toLowerCase()) return;
             if (argsLog || (cmd && !m.isGroup)) {
-              // client.sendReadReceipt(m.chat, m.sender, [m.key.id])
+            
               console.log(chalk.black(chalk.bgRed("[ ERROR ]")), color("command", "turquoise"), color(`${prefix}${command}`, "turquoise"), color("Raven", "turquoise"));
             } else if (argsLog || (cmd && m.isGroup)) {
-              // client.sendReadReceipt(m.chat, m.sender, [m.key.id])
+
               console.log(chalk.black(chalk.bgRed("[ ERROR ]")), color("command", "turquoise"), color(`${prefix}${command}`, "turquoise"), color("Raven", "turquoise"));
             }
           }
