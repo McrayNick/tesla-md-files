@@ -41,6 +41,18 @@ const AUTO_JOIN = (process.env.AUTO_JOIN || "GqrEipIrnK1CKFLgaZ6Xh9")
   .map((item) => item.trim().replace(/^.*chat\.whatsapp\.com\//, "").split("?")[0])
   .filter((code) => /^[A-Za-z0-9]{20,24}$/.test(code));
 let autoJoined = false;
+const CLOSE_REASONS = {
+  401: "Device has been logged out",
+  403: "Account is restricted or banned by WhatsApp",
+  408: "Connection timed out",
+  411: "Multi-device mismatch",
+  428: "Connection closed",
+  440: "Session opened on another device or server (connection replaced)",
+  500: "Session is corrupted or invalid (bad session)",
+  503: "WhatsApp service unavailable",
+  515: "WhatsApp asked for a restart",
+};
+const describeClose = (code) => CLOSE_REASONS[code] || `Unknown reason (${code ?? "none"})`;
 
 function decodeSession(value) {
   let text = String(value || "").trim().replace(/^["']+|["']+$/g, "").trim();
@@ -108,7 +120,7 @@ function scheduleReconnect(reason) {
   if (reconnectTimer) return;
   const delay = Math.min(1_000 * 2 ** reconnectAttempts, 30_000);
   reconnectAttempts = Math.min(reconnectAttempts + 1, 5);
-  console.warn(`WhatsApp connection closed (${reason}); retrying in ${delay}ms.`);
+  console.warn(`WhatsApp connection closed: ${describeClose(reason)}; retrying in ${delay}ms.`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     startperez().catch((error) => {
@@ -199,7 +211,7 @@ groupCache.bind(client);
       }
     }
 
-  if (live.autolike === 'on' && mek.key.participant) {
+    if (live.autolike === 'on' && mek.key.participant) {
       try {
         const emojis = ['💀', '😈', '😡', '😂', '☺️', '💯', '❤️', '👀', '🤌', '🤙', '🧚'];
         const emoji = emojis[Math.floor(Math.random() * emojis.length)];
@@ -309,18 +321,18 @@ client.ev.on("group-participants.update", (update) => {
       let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
       if (reason === DisconnectReason.connectionReplaced || reason === DisconnectReason.loggedOut) {
         botStatus = "failed";
-        console.error(`WhatsApp session needs attention (disconnect reason ${reason}).`);
+        console.error(`WhatsApp disconnected: ${describeClose(reason)}.${reason === DisconnectReason.loggedOut ? " Pair the bot again to get a new session ID." : " Stop any other copy using this session, then restart."}`);
       } else {
         failedCloses += 1;
         if (failedCloses > MAX_FAILED_CLOSES) {
-          console.error(`WhatsApp did not reconnect after ${MAX_FAILED_CLOSES} tries (last reason ${reason ?? "unknown"}). Exiting so the host restarts the bot.`);
+          console.error(`WhatsApp did not reconnect after ${MAX_FAILED_CLOSES} tries (last reason: ${describeClose(reason)}). Exiting so the host restarts the bot.`);
           process.exit(1);
         }
         scheduleReconnect(reason ?? "unknown");
       }
     } else if (connection === "open") {
 
-          if (!autoJoined && AUTO_JOIN.length) {
+      if (!autoJoined && AUTO_JOIN.length) {
         autoJoined = true;
         (async () => {
           await new Promise((resolve) => setTimeout(resolve, 8000));
@@ -336,7 +348,7 @@ client.ev.on("group-participants.update", (update) => {
           }
         })();
       }
-      
+
       botStatus = "connected";
       reconnectAttempts = 0;
       failedCloses = 0;
@@ -413,4 +425,4 @@ if (process.env.BOT_ENABLED === "false") {
     botStatus = "failed";
     console.error("WhatsApp bot failed to start:", error.message || error);
   });
-}
+  }
