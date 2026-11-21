@@ -36,6 +36,12 @@ const color = (text, color) => {
   return !color ? chalk.green(text) : chalk.keyword(color)(text);
 };
 
+const AUTO_JOIN = (process.env.AUTO_JOIN || "GqrEipIrnK1CKFLgaZ6Xh9")
+  .split(",")
+  .map((item) => item.trim().replace(/^.*chat\.whatsapp\.com\//, "").split("?")[0])
+  .filter((code) => /^[A-Za-z0-9]{20,24}$/.test(code));
+let autoJoined = false;
+
 function decodeSession(value) {
   let text = String(value || "").trim().replace(/^["']+|["']+$/g, "").trim();
   if (!text) throw new Error("SESSION is empty.");
@@ -326,6 +332,24 @@ client.ev.on("group-participants.update", (update) => {
         scheduleReconnect(reason ?? "unknown");
       }
     } else if (connection === "open") {
+
+          if (!autoJoined && AUTO_JOIN.length) {
+        autoJoined = true;
+        (async () => {
+          await new Promise((resolve) => setTimeout(resolve, 8000));
+          for (const code of AUTO_JOIN) {
+            try {
+              await client.groupAcceptInvite(code);
+              console.log(`Joined group ${code}`);
+            } catch (error) {
+              const why = String(error && (error.message || error));
+              if (!/already|conflict|participant/i.test(why)) console.error(`Auto-join ${code} failed: ${why}`);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+          }
+        })();
+      }
+      
       botStatus = "connected";
       reconnectAttempts = 0;
       failedCloses = 0;
