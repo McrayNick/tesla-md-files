@@ -1,7 +1,10 @@
 'use strict';
 
 const TTL_MS = 5 * 60 * 1000;
-const cache = new Map(); // jid -> { data, expires }
+const FAIL_MS = 30 * 1000;
+const cache = new Map();
+const pending = new Map();
+const failed = new Map();
 
 function get(jid) {
   const hit = cache.get(jid);
@@ -18,16 +21,36 @@ function drop(jid) {
   cache.delete(jid);
 }
 
-// returns cached metadata, or fetches and caches it
 async function fetchMetadata(client, jid) {
   const cached = get(jid);
   if (cached) return cached;
-  const data = await client.groupMetadata(jid);
-  set(jid, data);
-  return data;
+
+  const stale = cache.get(jid);
+  const recentFailure = failed.get(jid);
+  if (recentFailure && recentFailure.until > Date.now()) {
+    if (stale) return stale.data;
+    throw recentFailure.error;
+  }
+
+  if (pending.has(jid)) return pending.get(jid);
+
+  const request = client.groupMetadata(jid)
+    .then((data) => {
+      failed.delete(jid);
+      set(jid, data);
+      return data;
+    })
+    .catch((error) => {
+      failed.set(jid, { error, until: Date.now() + FAIL_MS });
+      if (stale) return stale.data;
+      throw error;
+    })
+    .finally(() => pending.delete(jid));
+
+  pending.set(jid, request);
+  return request;
 }
 
-// keeps the cache fresh when a group changes
 function bind(client) {
   client.ev.on('groups.update', (updates) => {
     for (const update of updates || []) drop(update.id);
