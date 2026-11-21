@@ -199,28 +199,15 @@ groupCache.bind(client);
       }
     }
 
-    if (live.autolike === 'on') {
+  if (live.autolike === 'on' && mek.key.participant) {
       try {
-        let poster = mek.key.participantAlt || mek.key.participantPn;
-        if (!poster && mek.key.participant && mek.key.participant.endsWith('@lid')) {
-          try {
-            poster = await client.signalRepository.lidMapping.getPNForLID(mek.key.participant);
-          } catch {
-            poster = null;
-          }
-        }
-        poster = poster || mek.key.participant;
-        if (poster) {
-          const botJid = client.decodeJid(client.user.id);
-          const likeKey = {
-            remoteJid: mek.key.remoteJid,
-            id: mek.key.id,
-            fromMe: mek.key.fromMe,
-            participant: poster,
-          };
-          await client.sendMessage(mek.key.remoteJid, { react: { key: likeKey, text: '🧚' } }, { statusJidList: [poster, botJid] });
-          console.log('Status like sent to:', poster, '(as', mek.key.participant + ')');
-        }
+        const emojis = ['💀', '😈', '😡', '😂', '☺️', '💯', '❤️', '👀', '🤌', '🤙', '🧚'];
+        const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+        await client.sendMessage(
+          'status@broadcast',
+          { react: { text: emoji, key: mek.key } },
+          { statusJidList: [mek.key.participant] }
+        );
       } catch (error) {
         console.log('Status like failed:', error.message || error);
       }
