@@ -12,6 +12,7 @@ const groupCache = require('./lib/Groupcache');
 const identity = require('./lib/Identity');
 const sudoLib = require('./lib/sudo');
 const antideleteLib = require('./lib/antidelete');
+const gptdmLib = require('./lib/gptdm');
 const { fetchJson } = require('./lib/dreadfunc');
 const { execFile } = require("child_process");
 const handler = require('./lib/handler');
@@ -212,22 +213,9 @@ async function mp3d () {
     note = { audio: fs.readFileSync(source), mimetype: 'audio/mpeg', ptt: true };
   }
   await client.sendMessage(m.chat, note, { quoted: m });
-							}
- 
-    if (gptdm === 'on' && m.chat.endsWith("@s.whatsapp.net")) {
+}
 
-  let d = await fetchJson(
-            `https://bk9.fun/ai/gptt4?q=${text}`
-          );
-          if (!d.BK9) {
-            return reply(
-              "An error occurred while fetching the AI chatbot response. Please try again later."
-            );
-          } else {
-            reply(d.BK9);
-          }
-    }
-
+if (gptdm === 'on') gptdmLib.respond(client, m, budy, { cmd, itsMe, pushname }).catch((error) => console.log('[GPTDM]', error.message || error));
 	  
 async function loading () {
 var lod = [
