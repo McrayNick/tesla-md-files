@@ -8,6 +8,8 @@ let databaseInitialized = false;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
 let failedCloses = 0;
+let currentClient = null;
+let setupDone = false;
 const MAX_FAILED_CLOSES = Number(process.env.MAX_FAILED_CLOSES) || 8;
 
 const crypto = require("crypto");
@@ -16,7 +18,6 @@ const { Boom } = require("@hapi/boom");
 const fs = require("fs");
 const path = require("path");
 const chalk = require("chalk");
-const logger = pino({ level: 'silent' });
 const FileType = require("file-type");
 const figlet = require("figlet");
 let lastTextTime = 0;
@@ -85,17 +86,12 @@ function decodeSession(value) {
 
 async function authenticationn() {
   const credsPath = path.join(__dirname, sessionName, "creds.json");
-  const useEnvSession = process.env.NODE_ENV === "production" || session.length > 0;
 
   if (sessionInitialized) return;
-  if (session === "zokk" && process.env.NODE_ENV !== "production" && fs.existsSync(credsPath)) {
-    sessionInitialized = true;
-    return;
-  }
-  if (!session && useEnvSession) {
-    throw new Error("SESSION must be set to a base64-encoded WhatsApp credentials file.");
-  }
   if (!session) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION must be set to a base64-encoded WhatsApp credentials file.");
+    }
     if (fs.existsSync(credsPath)) {
       sessionInitialized = true;
       return;
@@ -148,12 +144,11 @@ async function startperez() {
     databaseInitialized = true;
   }
 
-  await syncPlugins();
+  if (!setupDone) await syncPlugins();
   const tesla = require("./tesla.js");
 
-  let autobio;
   try {
-    ({ autobio } = await fetchSettings());
+    await fetchSettings();
     console.log("✅ Settings loaded");
   } catch (error) {
     console.error("❌ Failed to load settings:", error.message || error);
@@ -161,8 +156,8 @@ async function startperez() {
   }
 
   const { state, saveCreds } = await useMultiFileAuthState('session');
-  const { version, isLatest } = await fetchLatestBaileysVersion();
-  console.log(`using WA v${version.join(".")}, isLatest: ${isLatest}`);
+  const { version } = await fetchLatestBaileysVersion();
+  console.log(`using WA v${version.join(".")}`);
   console.log(
     color(
       figlet.textSync(botname, {
@@ -190,15 +185,7 @@ async function startperez() {
 
 groupCache.bind(client);
 
-  if (autobio === 'on') {
-    setInterval(() => {
-      const date = new Date();
-      const zone = { timeZone: 'Africa/Nairobi' };
-      client
-        .updateProfileStatus(`${date.toLocaleString('en-US', zone)} It's a ${date.toLocaleString('en-US', { weekday: 'long', ...zone })}.`)
-        .catch((error) => console.log('Autobio update failed:', error.message || error));
-    }, 60 * 1000);
-  }
+  currentClient = client;
 
   const handleStatus = async (mek, chatUpdate) => {
     if (chatUpdate.type !== "notify" || mek.key.fromMe) return;
@@ -242,23 +229,12 @@ groupCache.bind(client);
           continue;
         }
 
-        if (!client.public && !mek.key.fromMe && chatUpdate.type === "notify") continue;
-
         const m = smsg(client, mek);
         tesla(client, m, { ...chatUpdate, messages: [mek] }).catch((error) => console.log(error));
       } catch (err) {
         console.log(err);
       }
     }
-  });
-
-  const unhandledRejections = new Map();
-  process.on("unhandledRejection", (reason, promise) => {
-    unhandledRejections.set(promise, reason);
-    console.log("Unhandled Rejection at:", promise, "reason:", reason);
-  });
-  process.on("rejectionHandled", (promise) => {
-    unhandledRejections.delete(promise);
   });
 
   client.decodeJid = (jid) => {
@@ -286,8 +262,6 @@ client.ev.on('call', async (callData) => {
         lastTextTime = currentTime;
       }
     }
-  } else {
-    console.log("✅ Anticall is OFF. Call ignored.");
   }
 });
 
@@ -306,8 +280,6 @@ client.ev.on("group-participants.update", (update) => {
     if (id === client.decodeJid(client.user.id) && !withoutContact) return client.user.name || id.split("@")[0];
     return PhoneNumber("+" + id.split("@")[0].split(":")[0]).getNumber("international");
   };
-
-  client.public = true;
 
   client.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -402,6 +374,23 @@ client.ev.on("group-participants.update", (update) => {
      };
 
   client.sendText = (jid, text, quoted = "", options) => client.sendMessage(jid, { text: text, ...options }, { quoted });
+
+  if (!setupDone) {
+    setupDone = true;
+    process.on("unhandledRejection", (reason) => console.log("Unhandled rejection:", reason));
+    setInterval(async () => {
+      if (!currentClient) return;
+      try {
+        const { autobio } = await fetchSettings();
+        if (autobio !== 'on') return;
+        const date = new Date();
+        const zone = { timeZone: 'Africa/Nairobi' };
+        await currentClient.updateProfileStatus(`${date.toLocaleString('en-US', zone)} It's a ${date.toLocaleString('en-US', { weekday: 'long', ...zone })}.`);
+      } catch (error) {
+        console.log('Autobio update failed:', error.message || error);
+      }
+    }, 60 * 1000);
+  }
 
   return client;
 }
