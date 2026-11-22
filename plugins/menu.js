@@ -93,7 +93,18 @@ async function sendRepoButton(client, chat, quoted, botname) {
         },
       },
     }, { quoted, userJid: client.user.id });
-    await client.relayMessage(chat, message.message, { messageId: message.key.id });
+    const biz = {
+      tag: 'biz',
+      attrs: {},
+      content: [{
+        tag: 'interactive',
+        attrs: { type: 'native_flow', v: '1' },
+        content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }],
+      }],
+    };
+    const additionalNodes = [biz];
+    if (!String(chat).endsWith('@g.us')) additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } });
+    await client.relayMessage(chat, message.message, { messageId: message.key.id, additionalNodes });
   } catch (error) {
     console.error('[menu] repository button failed:', error.message);
   }
@@ -138,8 +149,9 @@ module.exports = [
       };
 
       try {
-        if (type === 'VIDEO' && fs.existsSync('./menu.mp4')) {
-          const video = fs.readFileSync('./menu.mp4');
+        const videoPath = ['./media/menu.mp4', './menu.mp4'].find((file) => fs.existsSync(file));
+        if (type === 'VIDEO' && videoPath) {
+          const video = fs.readFileSync(videoPath);
           await sendMedia(
             { video, caption: menu, gifPlayback: true },
             { video, caption: shortCaption, gifPlayback: true }
@@ -147,21 +159,6 @@ module.exports = [
         } else if (type === 'IMAGE') {
           const image = { url: 'https://files.catbox.moe/z6k2ho.jpg' };
           await sendMedia({ image, caption: menu }, { image, caption: shortCaption });
-        } else if (type === 'LINK') {
-          await client.sendMessage(chat, {
-            text: menu,
-            contextInfo: {
-              externalAdReply: {
-                showAdAttribution: true,
-                title: botname,
-                body: runtime(process.uptime()),
-                thumbnail: fs.existsSync('./Tesla.jpg') ? fs.readFileSync('./Tesla.jpg') : undefined,
-                sourceUrl: 'https://wa.me/254781346242?text=Hello👋+perez+Nihostie+Bot+Mkuu+😔',
-                mediaType: 1,
-                renderLargerThumbnail: true,
-              },
-            },
-          }, { quoted: m });
         } else {
           await sendText();
         }
