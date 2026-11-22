@@ -199,8 +199,9 @@ if (budy.startsWith('>')) {
 
 
 async function mp3d () {
-  const source = path.join(__dirname, 'menu.mp3');
-  const voice = path.join(__dirname, 'menu.ogg');
+  const mediaDir = fs.existsSync(path.join(__dirname, 'media', 'menu.mp3')) ? path.join(__dirname, 'media') : __dirname;
+  const source = path.join(mediaDir, 'menu.mp3');
+  const voice = path.join(mediaDir, 'menu.ogg');
   let note = null;
   try {
     if (!fs.existsSync(voice) || fs.statSync(voice).mtimeMs < fs.statSync(source).mtimeMs) {
