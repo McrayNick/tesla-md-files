@@ -1,170 +1,109 @@
-// Fun commands.
-// Commands: advice, catfact, fact, mix, pickupline, quotes
 const advice = require('badadvice');
-const { fetchJson } = require('../lib/dreadfunc');
+const axios = require('axios');
+const { createSticker } = require('../lib/sticker');
 
 module.exports = [
-  // advice (original Perez.js lines 954-958)
   {
     command: ['advice'],
     aliases: [],
     description: 'Get a random piece of advice',
     category: 'fun',
     handler: async (client, m, { reply }) => {
-    reply(advice());
-    console.log(advice());
+      reply(advice());
     },
   },
 
-  // catfact (original Perez.js lines 2466-2481)
   {
     command: ['catfact'],
     aliases: [],
     description: 'Get a random cat fact',
     category: 'fun',
     handler: async (client, m) => {
-    {
-    	try {
-    const data = await fetchJson('https://api.dreaded.site/api/catfact');
-
-    const fact = data.fact;
-
-    await m.reply(fact);
-
-    } catch (error) {
-
-    m.reply('Something is wrong.')
-
-    }
-
-        }
+      try {
+        const { data } = await axios.get('https://catfact.ninja/fact', { timeout: 10000 });
+        if (!data || !data.fact) throw new Error('empty response');
+        await m.reply(data.fact);
+      } catch (error) {
+        m.reply('Could not fetch a cat fact right now.');
+      }
     },
   },
 
-  // fact (original Perez.js lines 2451-2465)
   {
     command: ['fact'],
     aliases: [],
     description: 'Get a random fact',
     category: 'fun',
     handler: async (client, m) => {
-    {
-    	try {
-    const data = await fetchJson('https://api.dreaded.site/api/fact');
-
-    const fact = data.fact;
-
-    await m.reply(fact);
-
-    } catch (error) {
-
-    m.reply('Something is wrong.')
-
-    }
-    	      }
+      try {
+        const { data } = await axios.get('https://uselessfacts.jsph.pl/api/v2/facts/random?language=en', { timeout: 10000 });
+        if (!data || !data.text) throw new Error('empty response');
+        await m.reply(data.text);
+      } catch (error) {
+        m.reply('Could not fetch a fact right now.');
+      }
     },
   },
 
-  // mix (original Perez.js lines 4412-4456)
   {
     command: ['mix'],
     aliases: [],
     description: 'Combine two emojis',
     category: 'fun',
-    handler: async (client, m, { botname, text }) => {
-    {
-    const { Sticker, createSticker, StickerTypes } = require('wa-sticker-formatter');
+    handler: async (client, m, { botname, pushname, text }) => {
+      if (!text) return m.reply("Give two emojis, separated by '+', like 😀+😂");
 
-    const axios = require("axios");
-    if (!text) return m.reply("No emojis provided ? ")
+      const emojis = text.split('+').map((part) => part.trim()).filter(Boolean);
+      if (emojis.length !== 2) return m.reply("Specify the emojis and separate with '+'");
 
-      const emojis = text.split('+');
-
-      if (emojis.length !== 2) {
-        m.reply("Specify the emojis and separate with '+'");
-        return;
-      }
-
-      const emoji1 = emojis[0].trim();
-      const emoji2 = emojis[1].trim();
-
+      const [emoji1, emoji2] = emojis;
       try {
-        const axios = require('axios');
-        const response = await axios.get(`https://levanter.onrender.com/emix?q=${emoji1}${emoji2}`);
-
-        if (response.data.status === true) {
-
-          let stickerMess = new Sticker(response.data.result, {
-            pack: botname,
-            type: StickerTypes.CROPPED,
-            categories: ["🤩", "🎉"],
-            id: "12345",
-            quality: 70,
-            background: "transparent",
-          });
-          const stickerBuffer2 = await stickerMess.toBuffer();
-          client.sendMessage(m.chat, { sticker: stickerBuffer2 }, { quoted: m });
-
-        } else {
-          m.reply("Unable to create emoji mix.");
-        }
+        const { data } = await axios.get(
+          `https://emoji-kitchen-api.vercel.app/mix/${encodeURIComponent(emoji1)}/${encodeURIComponent(emoji2)}`,
+          { responseType: 'arraybuffer', timeout: 15000 },
+        );
+        const sticker = await createSticker(Buffer.from(data), { mime: 'image/png', pack: botname, author: pushname });
+        await client.sendMessage(m.chat, { sticker }, { quoted: m });
       } catch (error) {
-        m.reply("An error occurred while creating the emoji mix." + error );
+        if (error.response && error.response.status === 404) {
+          m.reply("Those two emojis don't have a mix.");
+        } else {
+          m.reply('The emoji mix service is unavailable right now.');
+        }
       }
-
-    	  }
     },
   },
 
-  // pickupline (original Perez.js lines 2108-2123)
   {
     command: ['pickupline'],
     aliases: [],
     description: 'Get a random pickup line',
     category: 'fun',
     handler: async (client, m) => {
-    {
-    		      const API_URL = 'https://api.popcat.xyz/pickuplines';
-
-        try {
-            const response = await fetch(API_URL);
-            if (!response.ok) throw new Error('Failed to fetch data');
-
-            const { pickupline } = await response.json();
-            const lineMessage = `${pickupline}`;
-
-            await client.sendMessage(m.chat, { text: lineMessage }, { quoted: m });
-        } catch (error) {
-            console.error('Error fetching data:', error);
-            await client.sendMessage(m.chat, { text: 'An error occurred while fetching the fact.' }, { quoted: m });
-        }
-    }
+      try {
+        const { data } = await axios.get('https://api.popcat.xyz/pickuplines', { timeout: 10000 });
+        if (!data || !data.pickupline) throw new Error('empty response');
+        await client.sendMessage(m.chat, { text: data.pickupline }, { quoted: m });
+      } catch (error) {
+        await client.sendMessage(m.chat, { text: 'Could not fetch a pickup line right now.' }, { quoted: m });
+      }
     },
   },
 
-  // quotes (original Perez.js lines 2168-2184)
   {
-    command: ['quotes'],
+    command: ['quote'],
     aliases: [],
     description: 'Get a random quote',
     category: 'fun',
     handler: async (client, m) => {
-    {
-    		      const API_URL = 'https://favqs.com/api/qotd';
-
-        try {
-            const response = await fetch(API_URL);
-            if (!response.ok) throw new Error('Failed to fetch data');
-
-            const { quote } = await response.json();
-            const quoteMessage = `${quote.body} \n\n𝗤𝘂𝗼𝘁𝗲 𝗕𝘆 ${quote.author}`;
-
-            await client.sendMessage(m.chat, { text: quoteMessage }, { quoted: m });
-        } catch (error) {
-            console.error('Error fetching data:', error);
-            await client.sendMessage(m.chat, { text: 'An error occurred while fetching the fact.' }, { quoted: m });
-        }
-    }
+      try {
+        const { data } = await axios.get('https://favqs.com/api/qotd', { timeout: 10000 });
+        if (!data || !data.quote) throw new Error('empty response');
+        const text = `${data.quote.body}\n\n𝗤𝘂𝗼𝘁𝗲 𝗕𝘆 ${data.quote.author}`;
+        await client.sendMessage(m.chat, { text }, { quoted: m });
+      } catch (error) {
+        await client.sendMessage(m.chat, { text: 'Could not fetch a quote right now.' }, { quoted: m });
+      }
     },
   },
 ];
