@@ -356,9 +356,8 @@ module.exports = [
     description: 'Identify a song from audio or video',
     category: 'tools',
     handler: async (client, m, { args, from, reply }) => {
-      const accessKey = process.env.ACR_ACCESS_KEY;
-      const accessSecret = process.env.ACR_ACCESS_SECRET;
-      if (!accessKey || !accessSecret) return reply('This command needs ACR_ACCESS_KEY and ACR_ACCESS_SECRET to be set by the bot owner.');
+      const accessKey = process.env.ACR_ACCESS_KEY || '2631ab98e77b49509e3edcf493757300';
+      const accessSecret = process.env.ACR_ACCESS_SECRET || 'KKbVWlTNCL3JjxjrWnywMdvQGanyhKRN0fpQxyUo';
 
       if (!m.quoted) throw 'Tag a short video or audio';
       const quoted = m.quoted;
