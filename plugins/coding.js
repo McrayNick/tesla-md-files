@@ -88,7 +88,7 @@ module.exports = [
     aliases: [],
     description: 'Run JavaScript with the bot context (main owner only)',
     category: 'coding',
-    handler: async (client, m, { NotOwner, MainOwner, reply, text, prefix }) => {
+    handler: async (client, m, { NotOwner, reply, text, prefix }) => {
       if (!Owner) throw NotOwner;
       if (!text) return reply(`Write the code to run: ${prefix}eval <code>`);
       try {
