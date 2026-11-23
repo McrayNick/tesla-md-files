@@ -1,10 +1,10 @@
 
 const fs = require('fs');
 const handler = require('../lib/handler');
-const { generateWAMessageFromContent, proto } = require('@whiskeysockets/baileys');
+const { generateWAMessageFromContent, prepareWAMessageMedia, proto } = require('@whiskeysockets/baileys');
 
 const REPO_URL = process.env.REPO_URL || 'https://github.com/ignatiusmkuu-spec/Tesla-bot';
-const REPO_BUTTON = process.env.REPO_BUTTON || 'Repository';
+const REPO_BUTTON = process.env.REPO_BUTTON || 'OPEN REPO';
 
 function toBold(text) {
   return String(text).split('').map((c) => {
@@ -74,40 +74,40 @@ function buildMenu({ botname, greeting, pushname, prefix, uptime, dreadedspeed }
   return { menu, total };
 }
 
-async function sendRepoButton(client, chat, quoted, botname) {
-  try {
-    const button = {
-      name: 'cta_url',
-      buttonParamsJson: JSON.stringify({ display_text: REPO_BUTTON, url: REPO_URL, merchant_url: REPO_URL }),
-    };
-    const message = generateWAMessageFromContent(chat, {
-      viewOnceMessage: {
-        message: {
-          messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
-          interactiveMessage: proto.Message.InteractiveMessage.create({
-            header: proto.Message.InteractiveMessage.Header.create({ hasMediaAttachment: false }),
-            body: proto.Message.InteractiveMessage.Body.create({ text: `${botname} source code` }),
-            footer: proto.Message.InteractiveMessage.Footer.create({ text: 'A bot beyond the stars' }),
-            nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({ buttons: [button] }),
-          }),
-        },
-      },
-    }, { quoted, userJid: client.user.id });
-    const biz = {
-      tag: 'biz',
-      attrs: {},
-      content: [{
-        tag: 'interactive',
-        attrs: { type: 'native_flow', v: '1' },
-        content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }],
-      }],
-    };
-    const additionalNodes = [biz];
-    if (!String(chat).endsWith('@g.us')) additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } });
-    await client.relayMessage(chat, message.message, { messageId: message.key.id, additionalNodes });
-  } catch (error) {
-    console.error('[menu] repository button failed:', error.message);
+async function sendMenuWithButton(client, chat, quoted, { body, footer, media }) {
+  const button = {
+    name: 'cta_url',
+    buttonParamsJson: JSON.stringify({ display_text: REPO_BUTTON, url: REPO_URL, merchant_url: REPO_URL }),
+  };
+  let header = proto.Message.InteractiveMessage.Header.create({ hasMediaAttachment: false });
+  if (media) {
+    const prepared = await prepareWAMessageMedia(media, { upload: client.waUploadToServer });
+    header = proto.Message.InteractiveMessage.Header.create({ hasMediaAttachment: true, ...prepared });
   }
+  const message = generateWAMessageFromContent(chat, {
+    viewOnceMessage: {
+      message: {
+        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+        interactiveMessage: proto.Message.InteractiveMessage.create({
+          header,
+          body: proto.Message.InteractiveMessage.Body.create({ text: body }),
+          footer: proto.Message.InteractiveMessage.Footer.create({ text: footer }),
+          nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({ buttons: [button] }),
+        }),
+      },
+    },
+  }, { quoted, userJid: client.user.id });
+  const additionalNodes = [{
+    tag: 'biz',
+    attrs: {},
+    content: [{
+      tag: 'interactive',
+      attrs: { type: 'native_flow', v: '1' },
+      content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }],
+    }],
+  }];
+  if (!String(chat).endsWith('@g.us')) additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } });
+  await client.relayMessage(chat, message.message, { messageId: message.key.id, additionalNodes });
 }
 
 module.exports = [
@@ -128,8 +128,8 @@ module.exports = [
         dreadedspeed,
         uptime: runtime(process.uptime()),
       });
-      const shortCaption = `✨ ${toBold(botname)} ✨\n\n👤 ${toBold('User')}  ⟫  ${pushname}\n🔑 ${toBold('Prefix')}  ⟫  [ ${prefix} ]\n📦 ${toBold('Commands')}  ⟫  ${total}`;
 
+      const footer = `Powered by ${botname}`;
       const sendText = () => client.sendMessage(chat, { text: menu }, { quoted: m });
 
       try {
@@ -138,36 +138,21 @@ module.exports = [
         console.error('[menu] could not send the menu song:', error.message);
       }
 
-      const sendMedia = async (content, shortContent) => {
-        try {
-          await client.sendMessage(chat, content, { quoted: m });
-        } catch (error) {
-          console.error('[menu] media send failed:', error.message);
-          await client.sendMessage(chat, shortContent, { quoted: m });
-          await sendText();
-        }
-      };
+      const videoPath = ['./media/menu.mp4', './menu.mp4'].find((file) => fs.existsSync(file));
+      let media = null;
+      if (type === 'VIDEO' && videoPath) media = { video: fs.readFileSync(videoPath), gifPlayback: true };
+      else if (type === 'IMAGE') media = { image: { url: 'https://files.catbox.moe/z6k2ho.jpg' } };
 
       try {
-        const videoPath = ['./media/menu.mp4', './menu.mp4'].find((file) => fs.existsSync(file));
-        if (type === 'VIDEO' && videoPath) {
-          const video = fs.readFileSync(videoPath);
-          await sendMedia(
-            { video, caption: menu, gifPlayback: true },
-            { video, caption: shortCaption, gifPlayback: true }
-          );
-        } else if (type === 'IMAGE') {
-          const image = { url: 'https://files.catbox.moe/z6k2ho.jpg' };
-          await sendMedia({ image, caption: menu }, { image, caption: shortCaption });
-        } else {
-          await sendText();
-        }
+        await sendMenuWithButton(client, chat, m, { body: menu, footer, media });
       } catch (error) {
-        console.error('[menu] send failed:', error);
-        await sendText();
+        console.error('[menu] menu with button failed:', error.message);
+        try {
+          await sendText();
+        } catch (fallbackError) {
+          console.error('[menu] send failed:', fallbackError.message);
+        }
       }
-
-      await sendRepoButton(client, chat, m, botname);
     },
   },
 ];
