@@ -1,5 +1,4 @@
 
-// clone at your own risk
 const fs = require("fs");
 const path = require("path");
 const util = require("util");
@@ -12,6 +11,8 @@ const groupCache = require('./lib/Groupcache');
 const identity = require('./lib/Identity');
 const sudoLib = require('./lib/sudo');
 const antideleteLib = require('./lib/antidelete');
+const antilinkLib = require('./lib/antilink');
+const badwordLib = require('./lib/badword');
 const gptdmLib = require('./lib/gptdm');
 const { fetchJson } = require('./lib/dreadfunc');
 const { execFile } = require("child_process");
@@ -42,7 +43,8 @@ module.exports = async function tesla(client, m, chatUpdate) {
   gptdm,
   badword,
   antibot,
-  antitag	
+  antitag,
+  menutype
 } = await fetchSettings(); 
 	  
 	  
@@ -96,13 +98,9 @@ const qmsg = (quoted.msg || quoted);
 const author = process.env.STICKER_AUTHOR ||'MD';
 const packname = process.env.STICKER_PACKNAME || 'TESLA';
 const dev = process.env.DEV || '254781346242';
-const menu = process.env.MENU_TYPE || 'VIDEO';
+const menu = String(menutype || 'VIDEO').toUpperCase();
 const DevDreaded = dev.split(",");
-const badwordkick = process.env.BAD_WORD_KICK || 'FALSE';
-const bad = process.env.BAD_WORD || 'fuck';
-const badwords = bad.split(",")
 	  
-    // Group
     const groupMetadata = m.isGroup ? await groupCache.fetchMetadata(client, m.chat).catch((e) => { }) : "";
     const groupName = m.isGroup && groupMetadata ? await groupMetadata.subject : "";
     const groupParticipants = m.isGroup && groupMetadata ? groupMetadata.participants : [];
@@ -149,7 +147,6 @@ const runtime = function (seconds) {
 const timestamp = speed(); 
 const dreadedspeed = speed() - timestamp 
 	  
-    // Push Message To Console
  let argsLog = budy.length > 30 ? `${q.substring(0, 30)}...` : budy;
 
 if (wapresence === 'recording' && !m.isGroup) { 
@@ -165,7 +162,6 @@ if (wapresence === 'recording' && !m.isGroup) {
 if (cmd && mode === 'private' && !itsMe && !Owner && m.sender !== dev) {
 return;
 }
-
 
     if (autoread === 'on' && !m.isGroup) { 
              client.readMessages([m.key])
@@ -196,7 +192,6 @@ if (budy.startsWith('>')) {
    } 
  } 
  
-
 
 async function mp3d () {
   const mediaDir = fs.existsSync(path.join(__dirname, 'media', 'menu.mp3')) ? path.join(__dirname, 'media') : __dirname;
@@ -250,52 +245,19 @@ await client.sendMessage(from, {text: lod[i], edit: key });
             }
         };
 
-
         const getCurrentTimeInNairobi = () => {
             return DateTime.now().setZone('Africa/Nairobi').toLocaleString(DateTime.TIME_SIMPLE);
         };
 	  
-if (badword === 'on' && isBotAdmin && !isAdmin && body && (new RegExp('\\b' + badwords.join('\\b|\\b') + '\\b')).test(body.toLowerCase())) {
-            
-     client.groupParticipantsUpdate(from, [sender], 'remove')
-            reply("Hey niggah.\n\nMy owner hates usage of bad words in my presence!")
-            
-        
-                                                   }
-    if (antilink === 'on' && body.includes('chat.whatsapp.com') && !Owner && isBotAdmin && !isAdmin && m.isGroup) { 
-  
- kid = m.sender; 
-  
- client.sendMessage(m.chat, { 
-  
-                delete: { 
-                   remoteJid: m.chat, 
-                   fromMe: false, 
-                   id: m.key.id, 
-                   participant: kid 
-                } 
-             }).then(() => client.groupParticipantsUpdate(m.chat, [kid], 'remove')); 
- client.sendMessage(m.chat, {text:`𝗛𝗲𝘆 @${ki.split("@")[0]}👋\n\n𝗦𝗲𝗻𝗱𝗶𝗻𝗴 𝗚𝗿𝗼𝘂𝗽 𝗟𝗶𝗻𝗸𝘀 𝗶𝘀 𝗣𝗿𝗼𝗵𝗶𝗯𝗶𝘁𝗲𝗱 𝗶𝗻 𝘁𝗵𝗶𝘀 𝗚𝗿𝗼𝘂𝗽 !`, contextInfo:{mentionedJid:[kid]}}, {quoted:m}); 
-       }   
+    if (m.isGroup && badword === 'on') {
+      const scanned = [...new Set([body, budy, m.text].filter((part) => typeof part === 'string' && part))].join('\n');
+      if (await badwordLib.check(client, m, { text: scanned, Owner, isAdmin, isBotAdmin })) return;
+    }
 
-if (antilinkall === 'on' && body.includes('https://') && !Owner && isBotAdmin && !isAdmin && m.isGroup) { 
-  
- ki = m.sender; 
-  
- client.sendMessage(m.chat, { 
-  
-                delete: { 
-                   remoteJid: m.chat, 
-                   fromMe: false, 
-                   id: m.key.id, 
-                   participant: ki
-                } 
-             }).then(() => client.groupParticipantsUpdate(m.chat, [ki], 'remove')); 
- client.sendMessage(m.chat, {text:`𝗛𝗲𝘆 @${ki.split("@")[0]}👋\n\n𝗦𝗲𝗻𝗱𝗶𝗻𝗴 𝗟𝗶𝗻𝗸𝘀 𝗶𝘀 𝗣𝗿𝗼𝗵𝗶𝗯𝗶𝘁𝗲𝗱 𝗶𝗻 𝘁𝗵𝗶𝘀 𝗚𝗿𝗼𝘂𝗽 !`, contextInfo:{mentionedJid:[ki]}}, {quoted:m}); 
-       }   
-  
-  
-  
+    if (m.isGroup && (antilink === 'on' || antilinkall === 'on')) {
+      const scanned = [...new Set([body, budy, m.text].filter((part) => typeof part === 'string' && part))].join('\n');
+      if (await antilinkLib.check(client, m, { text: scanned, Owner, isAdmin, isBotAdmin })) return;
+    }
 
     if (cmd && !m.isGroup) {
       console.log(chalk.black(chalk.bgWhite("[ RAVEN-AI ]")), color(argsLog, "turquoise"), chalk.magenta("From"), chalk.green(pushname), chalk.yellow(`[ ${m.sender.replace("@s.whatsapp.net", "")} ]`));
