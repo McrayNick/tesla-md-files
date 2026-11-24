@@ -4,7 +4,7 @@ const handler = require('../lib/handler');
 const { generateWAMessageFromContent, prepareWAMessageMedia, proto } = require('@whiskeysockets/baileys');
 
 const REPO_URL = process.env.REPO_URL || 'https://github.com/ignatiusmkuu-spec/Tesla-bot';
-const REPO_BUTTON = process.env.REPO_BUTTON || 'OPEN REPO';
+const REPO_BUTTON = process.env.REPO_BUTTON || 'SOURCE-CODE';
 
 function toBold(text) {
   return String(text).split('').map((c) => {
@@ -140,7 +140,7 @@ module.exports = [
       const videoPath = ['./media/menu.mp4', './menu.mp4'].find((file) => fs.existsSync(file));
       let media = null;
       if (type === 'VIDEO' && videoPath) media = { video: fs.readFileSync(videoPath), gifPlayback: true };
-      else if (type === 'IMAGE') media = { image: { url: 'https://files.catbox.moe/z6k2ho.jpg' } };
+      else if (type === 'IMAGE') media = { image: { url: 'https://u.pone.rs/cuaydlcx.jpg' } };
 
       const isGroup = String(chat).endsWith('@g.us');
       const dmButton = String(process.env.DM_BUTTON || 'on').toLowerCase() !== 'off';
