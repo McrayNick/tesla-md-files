@@ -1,9 +1,72 @@
-// Settings commands.
-// Commands: antibot, anticall, antidelete, antilink, antilinkall, antitag, autobio, autolike, autoread, autoview, badword, gptdm, mode, prefix, wapresence, welcome
 const { getSettings, updateSetting } = require('../database/config');
-
 module.exports = [
-  // antibot (original Perez.js lines 917-927)
+
+  {
+    command: ['menutype'],
+    aliases: ['menustyle'],
+    description: 'Set how the menu is sent: text, image or video',
+    category: 'settings',
+    handler: async (client, m, { NotOwner, Owner, reply, text }) => {
+      if (!Owner) throw NotOwner;
+      const settings = await getSettings();
+      const current = String(settings.menutype || 'VIDEO').toLowerCase();
+      const wanted = String(text || '').trim().toLowerCase();
+      if (!wanted) return reply(`📜 Menu type is currently *${current.toUpperCase()}*\n\nUsage: menutype text/image/video`);
+      if (!['text', 'image', 'video'].includes(wanted)) return reply('Usage: menutype text/image/video');
+      if (wanted === current) return reply(`✅ Menu type is already *${wanted.toUpperCase()}*`);
+      const saved = await updateSetting('menutype', wanted.toUpperCase());
+      if (!saved) return reply('❌ Could not save the menu type. Try again.');
+      reply(`✅ Menu type updated to *${wanted.toUpperCase()}*`);
+    },
+  },
+
+  {
+    command: ['settings'],
+    aliases: ['setting', 'botsettings'],
+    description: 'Show every database setting and its current state',
+    category: 'settings',
+    handler: async (client, m, { NotOwner, Owner, reply }) => {
+      if (!Owner) throw NotOwner;
+      const settings = await getSettings();
+      const labels = {
+        mode: 'Mode',
+        prefix: 'Prefix',
+        menutype: 'Menu type',
+        wapresence: 'Presence',
+        autoread: 'Auto read',
+        autoview: 'Auto view status',
+        autolike: 'Auto like status',
+        autobio: 'Auto bio',
+        antilink: 'Anti link',
+        antilinkall: 'Anti link all',
+        antilinkaction: 'Anti link action',
+        antilinkwarns: 'Anti link warnings',
+        antitag: 'Anti tag',
+        antibot: 'Anti bot',
+        antidelete: 'Anti delete',
+        anticall: 'Anti call',
+        antidemote: 'Anti demote',
+        antipromote: 'Anti promote',
+        badword: 'Bad word filter',
+        badwordaction: 'Bad word action',
+        badwordwarns: 'Bad word warnings',
+        welcome: 'Welcome',
+        gptdm: 'GPT in DMs',
+      };
+      const show = (value) => {
+        const v = String(value);
+        if (v === 'on') return '🟢 ON';
+        if (v === 'off') return '🔴 OFF';
+        return `🔹 ${v.toUpperCase()}`;
+      };
+      const lines = Object.keys(labels)
+        .filter((key) => settings[key] !== undefined)
+        .map((key) => `• ${labels[key]} (${key}): ${key === 'prefix' ? `[ ${settings[key]} ]` : show(settings[key])}`);
+      const sudoCount = String(settings.sudo || '').split(',').map((n) => n.trim()).filter(Boolean).length;
+      lines.push(`• Sudo users (sudo): ${sudoCount}`);
+      reply(`⚙️ *BOT SETTINGS*\n\n${lines.join('\n')}\n\n_Change one with its command, for example: antilink on_`);
+    },
+  },
   {
     command: ['antibot'],
     aliases: [],
@@ -23,7 +86,6 @@ module.exports = [
     },
   },
 
-  // anticall (original Perez.js lines 905-915)
   {
     command: ['anticall'],
     aliases: [],
@@ -43,7 +105,6 @@ module.exports = [
     },
   },
 
-  // antidelete (original Perez.js lines 771-781)
   {
     command: ['antidelete'],
     aliases: [],
@@ -63,27 +124,69 @@ module.exports = [
     },
   },
 
-  // antilink (original Perez.js lines 725-735)
   {
     command: ['antilink'],
     aliases: [],
-    description: 'Remove members who send group invite links (on/off)',
+    description: 'Antilink: on/off, action delete|warn|kick, warns <n>, allow/unallow <domain>, list',
     category: 'settings',
-    handler: async (client, m, { NotOwner, Owner, reply, text }) => {
-    {
-    	if(!Owner) throw NotOwner;
+    handler: async (client, m, { NotOwner, Owner, reply, text, prefix }) => {
+      if (!Owner) throw NotOwner;
+      const antilink = require('../lib/antilink');
       const settings = await getSettings();
-      const current = settings.antilink;
-      if (!text) return reply(`🛡️ Antilink is currently *${current.toUpperCase()}*`);
-      if (!["on", "off"].includes(text)) return reply("Usage: antilink on/off");
-      if (text === current) return reply(`✅ Antilink is already *${text.toUpperCase()}*`);
-      await updateSetting("antilink", text);
-      reply(`✅ Antilink has been turned *${text.toUpperCase()}*`);
-    }
+      const parts = String(text || '').trim().split(/\s+/).filter(Boolean);
+      const sub = (parts[0] || '').toLowerCase();
+      const value = (parts[1] || '').toLowerCase();
+      const allowList = antilink.parseList(settings.antilinkallow);
+
+      const summary = () => [
+        '🛡️ *ANTILINK*',
+        '',
+        `• Group links (antilink): ${settings.antilink === 'on' ? '🟢 ON' : '🔴 OFF'}`,
+        `• All links (antilinkall): ${settings.antilinkall === 'on' ? '🟢 ON' : '🔴 OFF'}`,
+        `• Action: ${String(settings.antilinkaction || 'kick').toUpperCase()}`,
+        `• Warnings before removal: ${settings.antilinkwarns || 3}`,
+        `• Allowed domains: ${allowList.length ? allowList.join(', ') : 'none'}`,
+        '',
+        `${prefix}antilink on/off`,
+        `${prefix}antilink action delete/warn/kick`,
+        `${prefix}antilink warns 3`,
+        `${prefix}antilink allow youtube.com`,
+        `${prefix}antilink unallow youtube.com`,
+      ].join('\n');
+
+      if (!sub || sub === 'list' || sub === 'status') return reply(summary());
+
+      if (sub === 'on' || sub === 'off') {
+        if (settings.antilink === sub) return reply(`✅ Antilink is already *${sub.toUpperCase()}*`);
+        await updateSetting('antilink', sub);
+        return reply(`✅ Antilink has been turned *${sub.toUpperCase()}*`);
+      }
+
+      if (sub === 'action') {
+        if (!antilink.ACTIONS.includes(value)) return reply(`Usage: ${prefix}antilink action delete/warn/kick`);
+        await updateSetting('antilinkaction', value);
+        return reply(`✅ Antilink action set to *${value.toUpperCase()}*`);
+      }
+
+      if (sub === 'warns') {
+        const count = parseInt(value, 10);
+        if (!count || count < 1 || count > 10) return reply(`Usage: ${prefix}antilink warns 1-10`);
+        await updateSetting('antilinkwarns', String(count));
+        return reply(`✅ Members are removed after *${count}* warning${count === 1 ? '' : 's'}`);
+      }
+
+      if (sub === 'allow' || sub === 'unallow') {
+        const domain = antilink.parseList(value)[0];
+        if (!domain || !domain.includes('.')) return reply(`Usage: ${prefix}antilink ${sub} youtube.com`);
+        const next = sub === 'allow' ? [...new Set([...allowList, domain])] : allowList.filter((entry) => entry !== domain);
+        await updateSetting('antilinkallow', next.join(','));
+        return reply(sub === 'allow' ? `✅ *${domain}* is now allowed` : `✅ *${domain}* is no longer allowed`);
+      }
+
+      reply(summary());
     },
   },
 
-  // antilinkall (original Perez.js lines 759-769)
   {
     command: ['antilinkall'],
     aliases: [],
@@ -103,7 +206,6 @@ module.exports = [
     },
   },
 
-  // antitag (original Perez.js lines 929-939)
   {
     command: ['antitag'],
     aliases: [],
@@ -123,7 +225,6 @@ module.exports = [
     },
   },
 
-  // autobio (original Perez.js lines 855-866)
   {
     command: ['autobio'],
     aliases: [],
@@ -144,7 +245,6 @@ module.exports = [
     },
   },
 
-  // autolike (original Perez.js lines 842-853)
   {
     command: ['autolike'],
     aliases: [],
@@ -165,7 +265,6 @@ module.exports = [
     },
   },
 
-  // autoread (original Perez.js lines 795-805)
   {
     command: ['autoread'],
     aliases: [],
@@ -185,7 +284,6 @@ module.exports = [
     },
   },
 
-  // autoview (original Perez.js lines 868-879)
   {
     command: ['autoview'],
     aliases: [],
@@ -206,27 +304,73 @@ module.exports = [
     },
   },
 
-  // badword (original Perez.js lines 893-903)
   {
     command: ['badword'],
-    aliases: [],
-    description: 'Filter bad words in groups (on/off)',
+    aliases: ['badwords'],
+    description: 'Bad word filter: on/off, add/remove <word>, list, action delete|warn|kick, warns <n>',
     category: 'settings',
-    handler: async (client, m, { NotOwner, Owner, reply, text }) => {
-    {
-    	if(!Owner) throw NotOwner;
+    handler: async (client, m, { NotOwner, Owner, reply, text, prefix }) => {
+      if (!Owner) throw NotOwner;
+      const badword = require('../lib/badword');
       const settings = await getSettings();
-      const current = settings.badword;
-      if (!text) return reply(`😈 Badword is currently *${current.toUpperCase()}*`);
-      if (!["on", "off"].includes(text)) return reply("Usage: badword on/off");
-      if (text === current) return reply(`✅ Badword is already *${text.toUpperCase()}*`);
-      await updateSetting("badword", text);
-      reply(`✅ Badword has been turned *${text.toUpperCase()}*`);
-    }
+      const parts = String(text || '').trim().split(/\s+/).filter(Boolean);
+      const sub = (parts[0] || '').toLowerCase();
+      const value = (parts[1] || '').toLowerCase();
+      const words = badword.parseWords(settings.badwords);
+
+      const summary = () => [
+        '🤬 *BAD WORD FILTER*',
+        '',
+        `• Filter: ${settings.badword === 'on' ? '🟢 ON' : '🔴 OFF'}`,
+        `• Action: ${String(settings.badwordaction || 'kick').toUpperCase()}`,
+        `• Warnings before removal: ${settings.badwordwarns || 3}`,
+        `• Words in the list: ${words.length}`,
+        '',
+        `${prefix}badword on/off`,
+        `${prefix}badword add <word>`,
+        `${prefix}badword remove <word>`,
+        `${prefix}badword list`,
+        `${prefix}badword action delete/warn/kick`,
+        `${prefix}badword warns 3`,
+      ].join('\n');
+
+      if (!sub || sub === 'status') return reply(summary());
+
+      if (sub === 'on' || sub === 'off') {
+        if (settings.badword === sub) return reply(`✅ Badword is already *${sub.toUpperCase()}*`);
+        await updateSetting('badword', sub);
+        return reply(`✅ Badword has been turned *${sub.toUpperCase()}*`);
+      }
+
+      if (sub === 'list') {
+        return reply(words.length ? `🤬 *Bad words (${words.length})*\n\n${words.join(', ')}` : 'The bad word list is empty.');
+      }
+
+      if (sub === 'add' || sub === 'remove') {
+        const entries = badword.parseWords(parts.slice(1).join(','));
+        if (!entries.length) return reply(`Usage: ${prefix}badword ${sub} <word>`);
+        const next = sub === 'add' ? [...new Set([...words, ...entries])] : words.filter((word) => !entries.includes(word));
+        await updateSetting('badwords', next.join(','));
+        return reply(sub === 'add' ? `✅ Added ${entries.length} word${entries.length === 1 ? '' : 's'}` : `✅ Removed ${entries.length} word${entries.length === 1 ? '' : 's'}`);
+      }
+
+      if (sub === 'action') {
+        if (!badword.ACTIONS.includes(value)) return reply(`Usage: ${prefix}badword action delete/warn/kick`);
+        await updateSetting('badwordaction', value);
+        return reply(`✅ Badword action set to *${value.toUpperCase()}*`);
+      }
+
+      if (sub === 'warns') {
+        const count = parseInt(value, 10);
+        if (!count || count < 1 || count > 10) return reply(`Usage: ${prefix}badword warns 1-10`);
+        await updateSetting('badwordwarns', String(count));
+        return reply(`✅ Members are removed after *${count}* warning${count === 1 ? '' : 's'}`);
+      }
+
+      reply(summary());
     },
   },
 
-  // gptdm (original Perez.js lines 783-793)
   {
     command: ['gptdm'],
     aliases: [],
@@ -246,7 +390,6 @@ module.exports = [
     },
   },
 
-  // mode (original Perez.js lines 807-817)
   {
     command: ['mode'],
     aliases: [],
@@ -266,7 +409,6 @@ module.exports = [
     },
   },
 
-  // prefix (original Perez.js lines 819-840)
   {
     command: ['prefix'],
     aliases: [],
@@ -297,7 +439,6 @@ module.exports = [
     },
   },
 
-  // wapresence (original Perez.js lines 881-891)
   {
     command: ['wapresence'],
     aliases: [],
@@ -317,7 +458,6 @@ module.exports = [
     },
   },
 
-  // welcome (original Perez.js lines 941-952)
   {
     command: ['welcome'],
     aliases: [],
