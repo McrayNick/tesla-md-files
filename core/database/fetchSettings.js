@@ -22,7 +22,8 @@ async function fetchSettings() {
     anticall: data.anticall,
     sudo: data.sudo,
     antidemote: data.antidemote,
-    antipromote: data.antipromote
+    antipromote: data.antipromote,
+    menutype: data.menutype
   };
 }
 
