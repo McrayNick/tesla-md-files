@@ -143,10 +143,30 @@ module.exports = [
       if (type === 'VIDEO' && videoPath) media = { video: fs.readFileSync(videoPath), gifPlayback: true };
       else if (type === 'IMAGE') media = { image: { url: 'https://files.catbox.moe/z6k2ho.jpg' } };
 
+      const isGroup = String(chat).endsWith('@g.us');
+      const dmButton = String(process.env.DM_BUTTON || '').toLowerCase() === 'on';
+
       try {
-        await sendMenuWithButton(client, chat, m, { body: menu, footer, media });
+        if (isGroup || dmButton) {
+          await sendMenuWithButton(client, chat, m, { body: menu, footer, media });
+        } else {
+          const card = {
+            externalAdReply: {
+              title: REPO_BUTTON,
+              body: footer,
+              mediaType: 1,
+              sourceUrl: REPO_URL,
+              showAdAttribution: false,
+              renderLargerThumbnail: false,
+            },
+          };
+          let content = { text: menu, contextInfo: card };
+          if (media && media.video) content = { video: media.video, gifPlayback: true, caption: menu, contextInfo: card };
+          else if (media && media.image) content = { image: media.image, caption: menu, contextInfo: card };
+          await client.sendMessage(chat, content, { quoted: m });
+        }
       } catch (error) {
-        console.error('[menu] menu with button failed:', error.message);
+        console.error('[menu] menu send failed:', error.message);
         try {
           await sendText();
         } catch (fallbackError) {
