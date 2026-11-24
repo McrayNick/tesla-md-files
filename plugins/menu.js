@@ -92,7 +92,7 @@ async function sendMenuWithButton(client, chat, quoted, { body, footer, media })
           header,
           body: proto.Message.InteractiveMessage.Body.create({ text: body }),
           footer: proto.Message.InteractiveMessage.Footer.create({ text: footer }),
-          nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({ buttons: [button] }),
+          nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({ buttons: [button], messageParamsJson: '' }),
         }),
       },
     },
@@ -106,7 +106,6 @@ async function sendMenuWithButton(client, chat, quoted, { body, footer, media })
       content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }],
     }],
   }];
-  if (!String(chat).endsWith('@g.us')) additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } });
   await client.relayMessage(chat, message.message, { messageId: message.key.id, additionalNodes });
 }
 
@@ -129,7 +128,7 @@ module.exports = [
         uptime: runtime(process.uptime()),
       });
 
-      const footer = `Powered by ${botname}`;
+      const footer = `Made On Earth By Humans`;
       const sendText = () => client.sendMessage(chat, { text: menu }, { quoted: m });
 
       try {
@@ -144,29 +143,20 @@ module.exports = [
       else if (type === 'IMAGE') media = { image: { url: 'https://files.catbox.moe/z6k2ho.jpg' } };
 
       const isGroup = String(chat).endsWith('@g.us');
-      const dmButton = String(process.env.DM_BUTTON || '').toLowerCase() === 'on';
+      const dmButton = String(process.env.DM_BUTTON || 'on').toLowerCase() !== 'off';
 
       try {
         if (isGroup || dmButton) {
           await sendMenuWithButton(client, chat, m, { body: menu, footer, media });
         } else {
-          const card = {
-            externalAdReply: {
-              title: REPO_BUTTON,
-              body: footer,
-              mediaType: 1,
-              sourceUrl: REPO_URL,
-              showAdAttribution: false,
-              renderLargerThumbnail: false,
-            },
-          };
-          let content = { text: menu, contextInfo: card };
-          if (media && media.video) content = { video: media.video, gifPlayback: true, caption: menu, contextInfo: card };
-          else if (media && media.image) content = { image: media.image, caption: menu, contextInfo: card };
+          const link = `\n\n🔗 ${REPO_BUTTON}: ${REPO_URL}`;
+          let content = { text: menu + link };
+          if (media && media.video) content = { video: media.video, gifPlayback: true, caption: menu + link };
+          else if (media && media.image) content = { image: media.image, caption: menu + link };
           await client.sendMessage(chat, content, { quoted: m });
         }
       } catch (error) {
-        console.error('[menu] menu send failed:', error.message);
+        console.error('[menu] menu send failed:', error.message || error);
         try {
           await sendText();
         } catch (fallbackError) {
