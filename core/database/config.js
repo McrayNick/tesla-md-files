@@ -3,12 +3,18 @@
 const defaultSettings = {
   antilink: 'on',
   antilinkall: 'off',
+  antilinkaction: 'kick',
+  antilinkwarns: '3',
+  antilinkallow: '',
   autobio: 'off',
   antidelete: 'on',
   antitag: 'on',
   antibot: 'off',
   anticall: 'off',
   badword: 'on',
+  badwords: process.env.BAD_WORD || 'fuck',
+  badwordaction: 'kick',
+  badwordwarns: '3',
   gptdm: 'off',
   welcome: 'off',
   autoread: 'off',
@@ -19,7 +25,8 @@ const defaultSettings = {
   wapresence: 'online',
   sudo: '',
   antidemote: 'off',
-  antipromote: 'off'
+  antipromote: 'off',
+  menutype: ['TEXT', 'IMAGE', 'VIDEO'].includes(String(process.env.MENU_TYPE || '').toUpperCase()) ? String(process.env.MENU_TYPE).toUpperCase() : 'VIDEO'
 };
 
 const jsonStore = require('./jsonStore');
