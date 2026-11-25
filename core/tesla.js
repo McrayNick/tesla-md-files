@@ -13,6 +13,7 @@ const sudoLib = require('./lib/sudo');
 const antideleteLib = require('./lib/antidelete');
 const antilinkLib = require('./lib/antilink');
 const badwordLib = require('./lib/badword');
+const gamesLib = require('./lib/games');
 const gptdmLib = require('./lib/gptdm');
 const { fetchJson } = require('./lib/dreadfunc');
 const { execFile } = require("child_process");
@@ -258,6 +259,8 @@ await client.sendMessage(from, {text: lod[i], edit: key });
       const scanned = [...new Set([body, budy, m.text].filter((part) => typeof part === 'string' && part))].join('\n');
       if (await antilinkLib.check(client, m, { text: scanned, Owner, isAdmin, isBotAdmin })) return;
     }
+
+    if (!cmd && budy && await gamesLib.onMessage(client, m, budy.trim())) return;
 
     if (cmd && !m.isGroup) {
       console.log(chalk.black(chalk.bgWhite("[ RAVEN-AI ]")), color(argsLog, "turquoise"), chalk.magenta("From"), chalk.green(pushname), chalk.yellow(`[ ${m.sender.replace("@s.whatsapp.net", "")} ]`));
