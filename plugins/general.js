@@ -341,11 +341,12 @@ module.exports = [
     description: 'Check the bot response speed',
     category: 'general',
     handler: async (client, m, { dreadedspeed, loading }) => {
-    {
+      const sent = Number(m.messageTimestamp && m.messageTimestamp.low !== undefined ? m.messageTimestamp.low : m.messageTimestamp);
+      const latency = Number.isFinite(sent) && sent > 0 ? Date.now() - sent * 1000 : null;
+      const shown = latency !== null && latency >= 0 && latency < 60000 ? latency : Math.round(dreadedspeed || 0);
 
-    	    await loading ()
-    	     m.reply (`𝗣𝗼𝗻𝗴\n ${dreadedspeed.toFixed(4)} 𝗠𝘀`);
-             }
+      await loading();
+      m.reply(`𝗣𝗼𝗻𝗴\n ${shown} 𝗠𝘀`);
     },
   },
 
