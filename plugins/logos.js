@@ -4,7 +4,7 @@ const BASE_URL = 'https://en.ephoto360.com/';
 const EFFECTS = [
   { command: '1917', slug: '1917-style-text-effect-523' },
   { command: 'arena', slug: 'create-cover-arena-of-valor-by-mastering-360' },
-  { command: 'cat', slug: 'handwritten-text-on-foggy-glass-online-680' },
+  { command: 'foggy', slug: 'handwritten-text-on-foggy-glass-online-680' },
   { command: 'child', slug: 'write-text-on-wet-glass-online-589' },
   { command: 'devil', slug: 'neon-devil-wings-text-effect-online-683' },
   { command: 'dragonball', slug: 'create-dragon-ball-style-text-effects-online-809' },
