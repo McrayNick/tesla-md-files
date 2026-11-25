@@ -66,9 +66,6 @@ module.exports = async function tesla(client, m, chatUpdate) {
 var budy = typeof m.text == "string" ? m.text : "";
 var msgDreaded = m.message.extendedTextMessage?.contextInfo?.quotedMessage;
 	  
-const Heroku = require("heroku-client");  
-const appname = process.env.APP_NAME || '';
-const herokuapi = process.env.HEROKU_API;
 const cmd = body.startsWith(prefix);
 const botname = "TESLA-MD";
 	  
@@ -279,10 +276,10 @@ await client.sendMessage(from, {text: lod[i], edit: key });
     if (cmd && process.env.DEBUG_IDS === 'true') console.log('IDS', JSON.stringify({ fromMe: m.fromMe, sender: m.sender, key: mek.key, me: [...myIds], senderIds: [...senderAllIds], owner: Owner, itsMe, isAdmin }));
     if (cmd) {
       const handled = await handler.dispatch(command, client, m, {
-          DevDreaded, Heroku, NotOwner, Owner, MainOwner: Owner, isSudo, admin, appname,
+          DevDreaded, NotOwner, Owner, MainOwner: Owner, isSudo, admin,
           args, author, botAdmin, botNumber, botname, budy,
           chatUpdate, command, dreadedspeed, from, getGreeting, getCurrentTimeInNairobi, group,
-          groupMetadata, herokuapi, isAdmin, isBotAdmin, loading, mek,
+          groupMetadata, isAdmin, isBotAdmin, loading, mek,
           menu, menutype: menu, mime, mp3d, msgDreaded, mycode, packname,
           participants, prefix, pushname, qmsg, quoted, reply,
           runtime, sender, text, q: text,
