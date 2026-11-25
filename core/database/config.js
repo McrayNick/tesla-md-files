@@ -26,7 +26,7 @@ const defaultSettings = {
   sudo: '',
   antidemote: 'off',
   antipromote: 'off',
-  menutype: ['TEXT', 'IMAGE', 'VIDEO'].includes(String(process.env.MENU_TYPE || '').toUpperCase()) ? String(process.env.MENU_TYPE).toUpperCase() : 'VIDEO'
+  menutype: ['TEXT', 'IMAGE', 'VIDEO'].includes(String(process.env.MENU_TYPE || '').toUpperCase()) ? String(process.env.MENU_TYPE).toUpperCase() : 'IMAGE'
 };
 
 const jsonStore = require('./jsonStore');
