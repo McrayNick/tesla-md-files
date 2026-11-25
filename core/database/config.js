@@ -12,7 +12,7 @@ const defaultSettings = {
   antibot: 'off',
   anticall: 'off',
   badword: 'on',
-  badwords: process.env.BAD_WORD || 'fuck',
+  badwords: process.env.BAD_WORD || 'fuck,pussy,slut,bitch,cock,stupid',
   badwordaction: 'kick',
   badwordwarns: '3',
   gptdm: 'off',
