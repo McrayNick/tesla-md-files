@@ -22,6 +22,77 @@ async function api(path) {
   throw new Error(failures.join(' | ') || 'no football API configured');
 }
 
+const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
+const LIVE_LEAGUES = [
+  { slug: 'eng.1', name: 'Premier League', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', keys: ['epl', 'pl', 'premier', 'england'] },
+  { slug: 'esp.1', name: 'La Liga', flag: '🇪🇸', keys: ['laliga', 'liga', 'spain'] },
+  { slug: 'ger.1', name: 'Bundesliga', flag: '🇩🇪', keys: ['bundesliga', 'bl', 'germany'] },
+  { slug: 'ita.1', name: 'Serie A', flag: '🇮🇹', keys: ['seriea', 'sa', 'italy'] },
+  { slug: 'fra.1', name: 'Ligue 1', flag: '🇫🇷', keys: ['ligue1', 'l1', 'france'] },
+  { slug: 'uefa.champions', name: 'Champions League', flag: '🏆', keys: ['ucl', 'champions', 'cl'] },
+  { slug: 'uefa.europa', name: 'Europa League', flag: '🏆', keys: ['uel', 'europa', 'el'] },
+  { slug: 'uefa.europa.conf', name: 'Conference League', flag: '🏆', keys: ['uecl', 'conference'] },
+  { slug: 'eng.2', name: 'Championship', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', keys: ['championship'] },
+  { slug: 'eng.fa', name: 'FA Cup', flag: '🏆', keys: ['fa', 'facup'] },
+  { slug: 'ned.1', name: 'Eredivisie', flag: '🇳🇱', keys: ['eredivisie', 'ned'] },
+  { slug: 'por.1', name: 'Primeira Liga', flag: '🇵🇹', keys: ['primeira', 'portugal'] },
+  { slug: 'usa.1', name: 'MLS', flag: '🇺🇸', keys: ['mls', 'usa'] },
+  { slug: 'caf.nations', name: 'Africa Cup of Nations', flag: '🌍', keys: ['afcon', 'caf', 'africa'] },
+  { slug: 'fifa.world', name: 'World Cup', flag: '🌎', keys: ['worldcup', 'wc', 'fifa'] },
+];
+
+const ZONE = process.env.TIMEZONE || process.env.TZ || 'Africa/Nairobi';
+const kickoff = (iso) => {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: ZONE, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+  } catch (error) {
+    return '--:--';
+  }
+};
+
+async function leagueScores(league) {
+  const { data } = await axios.get(`${ESPN}/${league.slug}/scoreboard`, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+  const events = Array.isArray(data && data.events) ? data.events : [];
+  return events.map((event) => {
+    const comp = (event.competitions && event.competitions[0]) || {};
+    const status = (comp.status || event.status || {});
+    const type = status.type || {};
+    const side = (which) => (comp.competitors || []).find((c) => c.homeAway === which) || {};
+    const home = side('home');
+    const away = side('away');
+    const name = (c) => (c.team && (c.team.shortDisplayName || c.team.displayName)) || 'TBD';
+    const description = String(type.description || '').toLowerCase();
+    let state = type.state === 'in' ? 'live' : type.state === 'post' ? 'done' : 'soon';
+    let label;
+    if (/postponed|cancel|suspend|abandon|delayed/.test(description) || /postponed|cancel/.test(String(type.name || '').toLowerCase())) {
+      state = 'off';
+      label = type.description || 'Postponed';
+    } else if (state === 'live') {
+      label = /half/.test(description) && /time/.test(description) ? 'HT' : (status.displayClock || type.shortDetail || 'LIVE');
+    } else if (state === 'done') {
+      label = /pen/.test(description) ? 'FT (pens)' : /extra/.test(description) ? 'AET' : 'FT';
+    } else {
+      label = kickoff(event.date);
+    }
+    return {
+      league,
+      state,
+      label,
+      home: name(home),
+      away: name(away),
+      homeScore: home.score !== undefined && home.score !== '' ? home.score : null,
+      awayScore: away.score !== undefined && away.score !== '' ? away.score : null,
+      date: event.date,
+    };
+  });
+}
+
+function matchLine(match) {
+  const score = match.homeScore !== null && match.awayScore !== null && match.state !== 'soon' ? `${match.homeScore} - ${match.awayScore}` : 'vs';
+  const icon = { live: '🔴', done: '✅', soon: '🕒', off: '⚠️' }[match.state];
+  return `${icon} ${match.label}  ${match.home} ${score} ${match.away}`;
+}
+
 const BOLD_UPPER = 0x1D5D4;
 const BOLD_LOWER = 0x1D5EE;
 const BOLD_DIGIT = 0x1D7EC;
@@ -491,6 +562,53 @@ module.exports = [
         await m.reply(text);
       } catch (error) {
         m.reply('❌ Could not fetch the World Cup bracket right now.');
+      }
+    },
+  },
+
+  {
+    command: ['livescore'],
+    aliases: ['live', 'ls'],
+    description: 'Live football scores: livescore [league or team]',
+    category: 'sports',
+    handler: async (client, m, { text, prefix }) => {
+      const query = String(text || '').trim().toLowerCase();
+      const byLeague = query ? LIVE_LEAGUES.filter((l) => l.keys.includes(query.replace(/\s+/g, '')) || l.name.toLowerCase() === query) : [];
+      const leagues = byLeague.length ? byLeague : LIVE_LEAGUES;
+      const teamFilter = byLeague.length || query === 'all' ? '' : query;
+
+      try {
+        await client.sendMessage(m.chat, { react: { text: '⚽', key: m.key } });
+        const results = await Promise.allSettled(leagues.map((league) => leagueScores(league)));
+        const reachable = results.filter((r) => r.status === 'fulfilled');
+        if (!reachable.length) return m.reply('❌ Could not reach the live score service right now. Try again in a minute.');
+
+        let matches = reachable.flatMap((r) => r.value);
+        if (teamFilter) matches = matches.filter((x) => `${x.home} ${x.away}`.toLowerCase().includes(teamFilter));
+
+        const live = matches.filter((x) => x.state === 'live');
+        const showAll = byLeague.length > 0 || query === 'all' || Boolean(teamFilter);
+        const shown = showAll ? matches : live;
+
+        if (!shown.length) {
+          const upcoming = matches.filter((x) => x.state === 'soon').sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 8);
+          let reply = `⚽ ${bold('Live Scores')}\n\nNo matches are being played right now.`;
+          if (upcoming.length) reply += `\n\n🕒 *Coming up today (${ZONE})*\n${upcoming.map((x) => `${x.label}  ${x.home} vs ${x.away}  _${x.league.name}_`).join('\n')}`;
+          reply += `\n\n_Try ${prefix}livescore all for today's results and fixtures._`;
+          return m.reply(reply);
+        }
+
+        const order = { live: 0, soon: 1, done: 2, off: 3 };
+        let out = `⚽ ${bold('Live Scores')}\n`;
+        for (const league of leagues) {
+          const group = shown.filter((x) => x.league === league).sort((a, b) => order[a.state] - order[b.state] || new Date(a.date) - new Date(b.date)).slice(0, 12);
+          if (!group.length) continue;
+          out += `\n${league.flag} *${league.name}*\n${group.map(matchLine).join('\n')}\n`;
+        }
+        out += `\n🔴 live  ✅ finished  🕒 kick-off time (${ZONE})`;
+        await m.reply(out.trim());
+      } catch (error) {
+        m.reply('❌ Could not fetch live scores right now.');
       }
     },
   },
