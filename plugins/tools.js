@@ -3,7 +3,9 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const crypto = require('crypto');
 const yts = require('yt-search');
+const fs = require('fs');
 const { getAudio } = require('../lib/ytaudio');
+const { runFfmpeg, tempFile } = require('../lib/sticker');
 
 module.exports = [
   {
@@ -137,6 +139,35 @@ module.exports = [
   },
 
   {
+    command: ['funfact'],
+    aliases: ['fact'],
+    description: 'Get a random pickup line',
+    category: 'tools',
+    handler: async (client, m) => {
+  const url = 'https://uselessfacts.jsph.pl/random.json?language=en';
+        const response = await global.axios.get(url);
+        const fact = response.data.text;
+  m.reply(fact)
+   }
+ },
+
+    {
+    command: ['joke'],
+    description: 'Get a random joke',
+    category: 'tools',
+    handler: async (client, m, { reply }) => {
+      try {
+        const response = await global.axios.get('https://official-joke-api.appspot.com/random_joke');
+        const joke = response.data;
+        const jokeMessage = `*${joke.setup}*\n\n*${joke.punchline}* 😄`;
+        return reply(jokeMessage);
+      } catch (e) {
+        return reply("Couldn't fetch a joke right now. Please try again later.");
+      }
+    }
+  },
+  
+  {
     command: ['inspect'],
     aliases: [],
     description: "Fetch a website's HTML, CSS and JavaScript",
@@ -221,42 +252,87 @@ module.exports = [
     },
   },
 
-  {
-    command: ['movie'],
-    aliases: [],
-    description: 'Get movie or series info',
+    {
+    command: ['translate'],
+    aliases: ['tl', 'trt', 'trans'],
+    description: 'Translate text to any language',
     category: 'tools',
-    handler: async (client, m, { from, reply, text }) => {
-      if (!text) return reply('Provide a series or movie name.');
-      const key = process.env.OMDB_KEY;
-      if (!key) return reply('This command needs OMDB_KEY to be set by the bot owner.');
-      try {
-        const { data } = await axios.get('http://www.omdbapi.com/', { params: { apikey: key, t: text, plot: 'full' }, timeout: 10000 });
-        if (data.Response === 'False') return reply(data.Error || 'No result found for that title.');
-        const info = [
-          `🎬Title      : ${data.Title}`,
-          `📅Year       : ${data.Year}`,
-          `⭐Rated      : ${data.Rated}`,
-          `📆Released   : ${data.Released}`,
-          `⏳Runtime    : ${data.Runtime}`,
-          `🌀Genre      : ${data.Genre}`,
-          `👨🏻‍💻Director   : ${data.Director}`,
-          `✍Writer     : ${data.Writer}`,
-          `👨Actors     : ${data.Actors}`,
-          `📃Plot       : ${data.Plot}`,
-          `🌐Language   : ${data.Language}`,
-          `🌍Country    : ${data.Country}`,
-          `🎖️Awards     : ${data.Awards}`,
-          `📦BoxOffice  : ${data.BoxOffice}`,
-          `🏙️Production : ${data.Production}`,
-          `🌟imdbRating : ${data.imdbRating}`,
-          `❎imdbVotes  : ${data.imdbVotes}`,
-        ].join('\n');
-        await client.sendMessage(from, { image: { url: data.Poster }, caption: info }, { quoted: m });
-      } catch (error) {
-        reply('Could not fetch movie info right now.');
+    handler: async (client, m, { reply, text }) => {
+      const axios = require('axios');
+
+      const langNames = {
+        english: 'en', spanish: 'es', french: 'fr', german: 'de',
+        italian: 'it', portuguese: 'pt', russian: 'ru', arabic: 'ar',
+        chinese: 'zh', japanese: 'ja', korean: 'ko', hindi: 'hi',
+        swahili: 'sw', yoruba: 'yo', zulu: 'zu', igbo: 'ig',
+        hausa: 'ha', amharic: 'am', somali: 'so', turkish: 'tr',
+        dutch: 'nl', polish: 'pl', swedish: 'sv', greek: 'el',
+        hebrew: 'he', thai: 'th', vietnamese: 'vi', indonesian: 'id',
+        afrikaans: 'af', romanian: 'ro', ukrainian: 'uk', bengali: 'bn',
+        urdu: 'ur', persian: 'fa', malay: 'ms', danish: 'da',
+      };
+
+      const quotedText = m.quoted?.text
+                      || m.quoted?.caption
+                      || m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.conversation
+                      || m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.extendedTextMessage?.text
+                      || '';
+
+      let targetLang = 'en';
+      let inputText  = '';
+
+      if (!text && !quotedText) {
+        return reply(
+          '🌍 *Translate — Usage:*\n\n' +
+          '• *.translate Hello world* → to English\n' +
+          '• *.translate es Hello world* → to Spanish\n' +
+          '• *.translate fr* (reply to a message) → to French\n' +
+          '• *.translate arabic* (reply to a message) → to Arabic\n\n' +
+          '_Codes: en es fr de ar zh ja ko hi sw yo zu ig ha am tr nl pl sv el he th vi id af ro uk bn ur fa_'
+        );
       }
-    },
+
+      if (text) {
+        const parts     = text.trim().split(/\s+/);
+        const firstWord = parts[0].toLowerCase();
+        const isLangName = langNames[firstWord];
+        const isLangCode = /^[a-z]{2,3}$/.test(firstWord) && parts.length > 1;
+
+        if (isLangName) {
+          targetLang = isLangName;
+          inputText  = parts.slice(1).join(' ');
+        } else if (isLangCode) {
+          targetLang = firstWord;
+          inputText  = parts.slice(1).join(' ');
+        } else {
+          inputText = text.trim();
+        }
+      }
+
+      if (!inputText.trim() && quotedText) inputText = quotedText.trim();
+
+      if (!inputText.trim()) return reply('❌ No text to translate. Type text or reply to a message.');
+
+      try {
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&dt=ld&q=${encodeURIComponent(inputText)}`;
+        const res = await axios.get(url, { timeout: 15000 });
+
+        const translated = (res.data[0] || []).map(seg => seg?.[0] || '').join('').trim();
+        if (!translated) return reply('❌ Translation failed. Try again.');
+
+        const detectedLang = res.data?.[2] || 'auto';
+        const toLang   = Object.entries(langNames).find(([, v]) => v === targetLang)?.[0]   || targetLang.toUpperCase();
+        const fromLang = Object.entries(langNames).find(([, v]) => v === detectedLang)?.[0] || detectedLang.toUpperCase();
+
+        await client.sendMessage(m.chat, {
+          text: `🌍 *Translation*\n📥 *From:* ${fromLang}\n📤 *To:* ${toLang}\n\n${translated}`,
+        }, { quoted: m });
+
+      } catch (err) {
+        console.error('translate error:', err.message);
+        reply('❌ Translation failed. Try again in a moment.');
+      }
+    }
   },
 
   {
@@ -277,30 +353,59 @@ module.exports = [
   },
 
   {
-    command: ['trt'],
-    aliases: ['translate'],
-    description: 'Translate text',
+    command: ['bible'],
+    aliases: ['bibble-verse'],
+    description: 'Get a Bible verse',
     category: 'tools',
-    handler: async (client, m, { text }) => {
-      if (!text) return m.reply('Please provide a language code and text to translate!');
-      const parts = text.split(' ');
-      if (parts.length < 2) return m.reply('Please provide a language code and text to translate!');
-      const targetLang = parts[0];
-      const textToTranslate = parts.slice(1).join(' ');
+    handler: async (client, m, { reply, text, pushname }) => {
+      if (!text) return reply('Please provide a Bible reference.\n\nExample: bible John 3:16');
       try {
-        const { data } = await axios.get('https://api.mymemory.translated.net/get', {
-          params: { q: textToTranslate, langpair: `en|${targetLang}` },
-          timeout: 10000,
-        });
-        const translated = data.responseData && data.responseData.translatedText;
-        if (!translated) return m.reply('No translation found for the provided text.');
-        await client.sendMessage(m.chat, { text: translated }, { quoted: m });
+        const response = await global.axios.get(`https://bible-api.com/${encodeURIComponent(text)}`);
+        if (response.status === 200 && response.data.text) {
+          const { reference: ref, text: verseText, translation_name } = response.data;
+          reply(
+            `*Hello there, below is what you requested*\n\n` +
+            `📖 *Reference:* ${ref}\n` +
+            ` ${verseText}\n\n` +
+            `_Requested by ${pushname}_`
+          );
+        } else {
+          reply('*Verse not found.* Please check the reference and try again.');
+        }
       } catch (error) {
-        m.reply('An error occurred while fetching the data. Please try again later.');
+        reply('*An error occurred while fetching the Bible verse.* Please try again.');
       }
-    },
+    }
   },
 
+  {
+    command: ['quran'],
+    aliases: ['surah'],
+    description: 'Get a Quran verse',
+    category: 'tools',
+    handler: async (client, m, { reply, text, pushname }) => {
+      if (!text) return reply('Please provide Surah and Ayah\n*Example:* quran 2:255');
+      const input = text.split(':');
+      if (input.length !== 2) return reply('Incorrect format. Use: Surah:Ayah (e.g. 2:255)');
+      const [surah, ayah] = input;
+      try {
+        const res = await global.axios.get(`https://api.alquran.cloud/v1/ayah/${surah}:${ayah}/editions/quran-uthmani,en.asad`);
+        const arabic = res.data.data[0].text;
+        const english = res.data.data[1].text;
+        const surahInfo = res.data.data[0].surah;
+        const msg =
+          `*Holy Qur'an Verse*\n\n` +
+          `*Surah:* ${surahInfo.englishName} (${surahInfo.name})\n` +
+          `*Ayah:* ${ayah}\n\n` +
+          `*Arabic:* ${arabic}\n\n` +
+          `*English:* ${english}\n\n` +
+          `_Requested by ${pushname}_`;
+        client.sendMessage(m.chat, { text: msg }, { quoted: m });
+      } catch (e) {
+        reply('Could not find the verse. Please check the Surah and Ayah.');
+      }
+    }
+  },
   {
     command: ['tts'],
     aliases: ['say'],
@@ -318,36 +423,102 @@ module.exports = [
         spoken = args.slice(1).join(' ');
       }
 
+      let mp3;
       try {
-        const url = googleTTS.getAudioUrl(spoken, { lang, slow: false, host: 'https://translate.google.com' });
-        await client.sendMessage(m.chat, { audio: { url }, mimetype: 'audio/mp4', ptt: true }, { quoted: m });
+        const urls = googleTTS.getAllAudioUrls(spoken, { lang, slow: false, host: 'https://translate.google.com', splitPunct: ',.?!' }).map((part) => part.url);
+        const parts = [];
+        for (const url of urls.slice(0, 8)) {
+          const { data } = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+          parts.push(Buffer.from(data));
+        }
+        mp3 = Buffer.concat(parts);
+        if (!mp3.length) throw new Error('empty audio');
       } catch (error) {
-        m.reply('Could not convert that to speech.');
+        return m.reply('Could not convert that to speech.');
+      }
+
+      const input = tempFile('mp3');
+      const output = tempFile('ogg');
+      try {
+        fs.writeFileSync(input, mp3);
+        await runFfmpeg(['-y', '-i', input, '-vn', '-c:a', 'libopus', '-b:a', '48k', '-ar', '48000', '-ac', '1', '-f', 'ogg', output]);
+        await client.sendMessage(m.chat, { audio: fs.readFileSync(output), mimetype: 'audio/ogg; codecs=opus', ptt: true }, { quoted: m });
+      } catch (error) {
+        try {
+          await client.sendMessage(m.chat, { audio: mp3, mimetype: 'audio/mpeg', ptt: false }, { quoted: m });
+        } catch (sendError) {
+          m.reply('Could not convert that to speech.');
+        }
+      } finally {
+        for (const file of [input, output]) fs.rmSync(file, { force: true });
       }
     },
   },
 
-  {
+    {
     command: ['weather'],
-    aliases: [],
-    description: 'Get the weather for a city',
+    description: 'Get weather for a location',
     category: 'tools',
-    handler: async (client, m, { text }) => {
-      if (!text) return m.reply('Provide a city/town name');
-      const key = process.env.OPENWEATHER_KEY;
-      if (!key) return m.reply('This command needs OPENWEATHER_KEY to be set by the bot owner.');
+    handler: async (client, m, { reply, text }) => {
+      if (!text) return reply('provide a city/town name');
       try {
-        const { data } = await axios.get('https://api.openweathermap.org/data/2.5/weather', {
-          params: { q: text, units: 'metric', appid: key },
-          timeout: 10000,
-        });
+        const response = await fetch(`http://api.openweathermap.org/data/2.5/weather?q=${text}&units=metric&appid=1ad47ec6172f19dfaf89eb3307f74785`);
+        const data = await response.json();
+        const cityName = data.name;
+        const temperature = data.main.temp;
+        const description = data.weather[0].description;
+        const humidity = data.main.humidity;
+        const windSpeed = data.wind.speed;
+        const rainVolume = data.rain ? data.rain['1h'] : 0;
+        const cloudiness = data.clouds.all;
         const sunrise = new Date(data.sys.sunrise * 1000);
         const sunset = new Date(data.sys.sunset * 1000);
-        await m.reply(`❄️ Weather in ${data.name}\n\n🌡️ Temperature: ${data.main.temp}°C\n📝 Description: ${data.weather[0].description}\n❄️ Humidity: ${data.main.humidity}%\n🌀 Wind Speed: ${data.wind.speed} m/s\n🌧️ Rain Volume (last hour): ${data.rain ? data.rain['1h'] || 0 : 0} mm\n☁️ Cloudiness: ${data.clouds.all}%\n🌄 Sunrise: ${sunrise.toLocaleTimeString()}\n🌅 Sunset: ${sunset.toLocaleTimeString()}`);
-      } catch (error) {
+        await m.reply(
+          `❄️ Weather in ${cityName}\n\n` +
+          `🌡️ Temperature: ${temperature}°C\n` +
+          `📝 Description: ${description}\n` +
+          `❄️ Humidity: ${humidity}%\n` +
+          `🌀 Wind Speed: ${windSpeed} m/s\n` +
+          `🌧️ Rain Volume (last hour): ${rainVolume} mm\n` +
+          `☁️ Cloudiness: ${cloudiness}%\n` +
+          `🌄 Sunrise: ${sunrise.toLocaleTimeString()}\n` +
+          `🌅 Sunset: ${sunset.toLocaleTimeString()}`
+        );
+      } catch (e) {
         m.reply('Unable to find that location.');
       }
-    },
+    }
+  },
+
+  {
+    command: ['movie'],
+    aliases: ['mv'],
+    description: 'Search IMDB for a movie or series',
+    category: 'tools',
+    handler: async (client, m, { reply, text, from }) => {
+      if (!text) return reply('Provide a series or movie name.');
+      let fids = await global.axios.get(`http://www.omdbapi.com/?apikey=742b2d09&t=${encodeURIComponent(text)}&plot=full`);
+      let imdbt =
+        '⚍⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚍\n ``` IMDB MOVIE SEARCH```\n⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎⚎\n' +
+        `🎬Title      : ${fids.data.Title}\n` +
+        `📅Year       : ${fids.data.Year}\n` +
+        `⭐Rated      : ${fids.data.Rated}\n` +
+        `📆Released   : ${fids.data.Released}\n` +
+        `⏳Runtime    : ${fids.data.Runtime}\n` +
+        `🌀Genre      : ${fids.data.Genre}\n` +
+        `👨🏻‍💻Director   : ${fids.data.Director}\n` +
+        `✍Writer     : ${fids.data.Writer}\n` +
+        `👨Actors     : ${fids.data.Actors}\n` +
+        `📃Plot       : ${fids.data.Plot}\n` +
+        `🌐Language   : ${fids.data.Language}\n` +
+        `🌍Country    : ${fids.data.Country}\n` +
+        `🎖️Awards     : ${fids.data.Awards}\n` +
+        `📦BoxOffice  : ${fids.data.BoxOffice}\n` +
+        `🏙️Production : ${fids.data.Production}\n` +
+        `🌟imdbRating : ${fids.data.imdbRating}\n` +
+        `❎imdbVotes  : ${fids.data.imdbVotes}`;
+      client.sendMessage(from, { image: { url: fids.data.Poster }, caption: imdbt }, { quoted: m });
+    }
   },
 
   {
