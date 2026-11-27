@@ -140,7 +140,7 @@ module.exports = [
 
   {
     command: ['funfact'],
-    aliases: ['fact'],
+    aliases: [],
     description: 'Get a random pickup line',
     category: 'tools',
     handler: async (client, m) => {
