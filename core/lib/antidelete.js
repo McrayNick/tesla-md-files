@@ -24,11 +24,11 @@ async function loadBaileys() {
 const safe = (name) => String(name).replace(/[^a-zA-Z0-9@._-]/g, '_');
 const fileFor = (chat, id) => path.join(BASE_DIR, safe(chat), `${safe(id)}.json`);
 
-async function save(message) {
+async function save(message, options = {}) {
   try {
     const key = message && message.key;
     if (!key || !message.message) return;
-    if (key.remoteJid === 'status@broadcast' || key.fromMe) return;
+    if ((key.remoteJid === 'status@broadcast' && !options.status) || key.fromMe) return;
     const { BufferJSON } = await loadBaileys();
     const file = fileFor(key.remoteJid, key.id);
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
@@ -140,7 +140,7 @@ async function handleRevocation(client, mek, sendTo) {
   const mentions = [...new Set([senderTag, deleterTag])];
   const send = (content) => client.sendMessage(to, { ...content, mentions });
 
-  const location = await locationOf(client, mek.key.remoteJid);
+  const location = mek.key.remoteJid === 'status@broadcast' ? 'Status' : await locationOf(client, mek.key.remoteJid);
   const sentAt = toSeconds(original.messageTimestamp) * 1000;
   const name = original.pushName || 'Unknown';
   const header = [
@@ -227,9 +227,38 @@ async function sendMedia(send, header, label, caption, build) {
   await send(content);
 }
 
+const watched = new WeakSet();
+
+async function handleStatus(client, mek) {
+  try {
+    if (!mek || !mek.message || !mek.key || mek.key.remoteJid !== 'status@broadcast') return;
+    const { getSettings } = require('../database/config');
+    const mode = (await getSettings()).antidelete;
+    if (!['chat', 'group', 'private', 'both', 'on'].includes(mode)) return;
+    if (isRevocation(mek)) {
+      await handleRevocation(client, mek, client.decodeJid(client.user.id));
+      return;
+    }
+    await save(mek, { status: true });
+  } catch (error) {
+    console.error('Antidelete status failed:', error.message || error);
+  }
+}
+
+function watchStatuses(client) {
+  if (!client || !client.ev || watched.has(client)) return;
+  watched.add(client);
+  client.ev.on('messages.upsert', (update) => {
+    for (const mek of (update && update.messages) || []) {
+      if (mek && mek.key && mek.key.remoteJid === 'status@broadcast') handleStatus(client, mek);
+    }
+  });
+}
+
 // The one entry point. Returns nothing; it never throws, so it cannot break message handling.
 async function handle(client, m, mek, mode) {
   try {
+    watchStatuses(client);
     if (!mode || mode === 'off' || !mek || !mek.message) return;
     const self = client.decodeJid(client.user.id);
     const here = mek.key.remoteJid;
@@ -253,4 +282,4 @@ async function handle(client, m, mek, mode) {
   }
 }
 
-module.exports = { handle, save, handleRevocation, isRevocation, BASE_DIR };
+module.exports = { handle, handleStatus, watchStatuses, save, handleRevocation, isRevocation, BASE_DIR };
