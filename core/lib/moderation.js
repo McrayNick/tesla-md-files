@@ -17,11 +17,13 @@ function clear(bucket, chat, user) {
   warnings.delete(`${bucket}|${chat}|${user}`);
 }
 
-async function enforce(client, m, { bucket, title, noun, action, limit }) {
+async function enforce(client, m, { bucket, title, noun, rule, offence, action, limit }) {
   const user = m.sender;
   const tag = `@${String(user).split('@')[0]}`;
   const kind = ACTIONS.includes(action) ? action : 'kick';
   const max = Math.max(1, parseInt(limit, 10) || 3);
+  const notAllowed = rule || `${noun} are not allowed here.`;
+  const reason = offence || `using ${noun}`;
 
   await client.sendMessage(m.chat, {
     delete: { remoteJid: m.chat, fromMe: false, id: m.key.id, participant: m.key.participant || user },
@@ -30,7 +32,7 @@ async function enforce(client, m, { bucket, title, noun, action, limit }) {
   const say = (body) => client.sendMessage(m.chat, { text: body, mentions: [user] }, { quoted: m }).catch(() => { });
 
   if (kind === 'delete') {
-    await say(`${title}\n\n${tag}, ${noun} are not allowed here. Your message was deleted.`);
+    await say(`${title}\n\n${tag}, ${notAllowed} Your message was deleted.`);
     return true;
   }
 
@@ -38,7 +40,7 @@ async function enforce(client, m, { bucket, title, noun, action, limit }) {
   if (kind === 'warn') {
     const count = strike(bucket, m.chat, user);
     if (count < max) {
-      await say(`${title}\n\n${tag}, ${noun} are not allowed here.\n\n⚠️ Warning ${count}/${max}. You will be removed at ${max}.`);
+      await say(`${title}\n\n${tag}, ${notAllowed}\n\n⚠️ Warning ${count}/${max}. You will be removed at ${max}.`);
       return true;
     }
     note = `\n\n⚠️ Warning ${count}/${max}. Limit reached.`;
@@ -46,7 +48,7 @@ async function enforce(client, m, { bucket, title, noun, action, limit }) {
 
   clear(bucket, m.chat, user);
   await client.groupParticipantsUpdate(m.chat, [user], 'remove').catch(() => { });
-  await say(`${title}\n\n${tag} was removed for using ${noun}.${note}`);
+  await say(`${title}\n\n${tag} was removed for ${reason}.${note}`);
   return true;
 }
 
