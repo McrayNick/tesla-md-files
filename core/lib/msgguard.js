@@ -4,7 +4,7 @@ const moderation = require('./moderation');
 const { ACTIONS } = moderation;
 
 const STATUS_TYPES = ['groupStatusMessageV2', 'groupStatusMessage'];
-const MENTION_TYPES = ['groupMentionedMessage', 'groupStatusMentionMessage'];
+const MENTION_TYPES = ['groupMentionedMessage', 'groupStatusMentionMessage', 'statusMentionMessage'];
 
 function contextsOf(m) {
   const found = [];
@@ -36,15 +36,41 @@ function tagLimit(groupMetadata) {
   return Math.max(5, Math.ceil(size * 0.6));
 }
 
+function findKeys(node, depth = 0, found = new Set(), seen = new Set()) {
+  if (!node || typeof node !== 'object' || depth > 4 || seen.has(node)) return found;
+  seen.add(node);
+  for (const key of Object.keys(node)) {
+    found.add(key);
+    const child = node[key];
+    if (child && typeof child === 'object' && !Buffer.isBuffer(child) && !(child instanceof Uint8Array)) findKeys(child, depth + 1, found, seen);
+  }
+  return found;
+}
+
+function isStatusMentionProtocol(m) {
+  const protocol = m.message && m.message.protocolMessage;
+  if (!protocol) return false;
+  return protocol.type === 25 || protocol.type === 'STATUS_MENTION_MESSAGE';
+}
+
 function hasType(m, types) {
   if (types.includes(m.mtype)) return true;
-  return !!m.message && types.some((type) => m.message[type]);
+  if (!m.message) return false;
+  const keys = findKeys(m.message);
+  if (types.some((type) => keys.has(type))) return true;
+  return types === MENTION_TYPES && isStatusMentionProtocol(m);
 }
 
 async function check(client, m, ctx) {
   try {
     if (!m.isGroup || m.fromMe) return false;
     const { Owner, isAdmin, isBotAdmin, groupMetadata } = ctx;
+    if (process.env.GUARD_DEBUG) {
+      const keys = [...findKeys(m.message)];
+      if (keys.some((key) => /status|mention/i.test(key))) {
+        console.log('[msgguard]', JSON.stringify({ mtype: m.mtype, keys: keys.slice(0, 30), protocol: m.message && m.message.protocolMessage ? m.message.protocolMessage.type : undefined, Owner: !!Owner, isAdmin: !!isAdmin, isBotAdmin: !!isBotAdmin }));
+      }
+    }
     if (Owner || isAdmin || !isBotAdmin) return false;
 
     const settings = await getSettings();
