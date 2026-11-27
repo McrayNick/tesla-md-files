@@ -1,5 +1,62 @@
 const { getSettings, updateSetting } = require('../database/config');
+
+const ACTION_LIST = ['delete', 'warn', 'kick'];
+
+function guardCommand({ command, aliases, key, label, description }) {
+  return {
+    command: [command],
+    aliases,
+    description,
+    category: 'settings',
+    handler: async (client, m, { NotOwner, Owner, reply, text, prefix }) => {
+      if (!Owner) throw NotOwner;
+      const settings = await getSettings();
+      const parts = String(text || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const sub = parts[0];
+      const value = parts[1];
+      const summary = () => [
+        `🛡️ *${label.toUpperCase()}*`,
+        '',
+        `• Status: ${settings[key] === 'on' ? '🟢 ON' : '🔴 OFF'}`,
+        `• Action: ${String(settings[key + 'action'] || 'kick').toUpperCase()}`,
+        `• Warnings before removal: ${settings[key + 'warns'] || 3}`,
+        '',
+        `${prefix}${command} on/off`,
+        `${prefix}${command} action delete/warn/kick`,
+        `${prefix}${command} warns 3`,
+      ].join('\n');
+
+      if (!sub || sub === 'status') return reply(summary());
+
+      if (sub === 'on' || sub === 'off') {
+        if (settings[key] === sub) return reply(`✅ ${label} is already *${sub.toUpperCase()}*`);
+        await updateSetting(key, sub);
+        return reply(`✅ ${label} has been turned *${sub.toUpperCase()}*`);
+      }
+
+      if (sub === 'action') {
+        if (!ACTION_LIST.includes(value)) return reply(`Usage: ${prefix}${command} action delete/warn/kick`);
+        await updateSetting(key + 'action', value);
+        return reply(`✅ ${label} action set to *${value.toUpperCase()}*`);
+      }
+
+      if (sub === 'warns') {
+        const count = parseInt(value, 10);
+        if (!count || count < 1 || count > 10) return reply(`Usage: ${prefix}${command} warns 1-10`);
+        await updateSetting(key + 'warns', String(count));
+        return reply(`✅ Members are removed after *${count}* warning${count === 1 ? '' : 's'}`);
+      }
+
+      reply(summary());
+    },
+  };
+}
+
 module.exports = [
+
+  guardCommand({ command: 'antigroupstatus', aliases: ['antigstatus', 'antigs'], key: 'antigroupstatus', label: 'Anti group status', description: 'Block group status posts: on/off, action delete|warn|kick, warns <n>' }),
+  guardCommand({ command: 'antigroupmention', aliases: ['antigmention', 'antigm'], key: 'antigroupmention', label: 'Anti group mention', description: 'Block group mentions in statuses: on/off, action delete|warn|kick, warns <n>' }),
+  guardCommand({ command: 'antitagall', aliases: ['antimasstag'], key: 'antitagall', label: 'Anti tag all', description: 'Block mass tagging: on/off, action delete|warn|kick, warns <n>' }),
 
   {
     command: ['menutype'],
@@ -42,6 +99,15 @@ module.exports = [
         antilinkaction: 'Anti link action',
         antilinkwarns: 'Anti link warnings',
         antitag: 'Anti tag',
+        antigroupstatus: 'Anti group status',
+        antigroupstatusaction: 'Anti group status action',
+        antigroupstatuswarns: 'Anti group status warnings',
+        antigroupmention: 'Anti group mention',
+        antigroupmentionaction: 'Anti group mention action',
+        antigroupmentionwarns: 'Anti group mention warnings',
+        antitagall: 'Anti tag all',
+        antitagallaction: 'Anti tag all action',
+        antitagallwarns: 'Anti tag all warnings',
         antibot: 'Anti bot',
         antidelete: 'Anti delete',
         anticall: 'Anti call',
