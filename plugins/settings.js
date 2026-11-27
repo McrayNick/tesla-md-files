@@ -80,57 +80,104 @@ module.exports = [
   {
     command: ['settings'],
     aliases: ['setting', 'botsettings'],
-    description: 'Show every database setting and its current state',
+    description: 'Show every bot setting grouped by section (settings security/auto/bot)',
     category: 'settings',
-    handler: async (client, m, { NotOwner, Owner, reply }) => {
+    handler: async (client, m, { NotOwner, Owner, reply, text, prefix }) => {
       if (!Owner) throw NotOwner;
-      const settings = await getSettings();
-      const labels = {
-        mode: 'Mode',
-        prefix: 'Prefix',
-        menutype: 'Menu type',
-        wapresence: 'Presence',
-        autoread: 'Auto read',
-        autoview: 'Auto view status',
-        autolike: 'Auto like status',
-        autobio: 'Auto bio',
-        antilink: 'Anti link',
-        antilinkall: 'Anti link all',
-        antilinkaction: 'Anti link action',
-        antilinkwarns: 'Anti link warnings',
-        antitag: 'Anti tag',
-        antigroupstatus: 'Anti group status',
-        antigroupstatusaction: 'Anti group status action',
-        antigroupstatuswarns: 'Anti group status warnings',
-        antigroupmention: 'Anti group mention',
-        antigroupmentionaction: 'Anti group mention action',
-        antigroupmentionwarns: 'Anti group mention warnings',
-        antitagall: 'Anti tag all',
-        antitagallaction: 'Anti tag all action',
-        antitagallwarns: 'Anti tag all warnings',
-        antibot: 'Anti bot',
-        antidelete: 'Anti delete',
-        anticall: 'Anti call',
-        antidemote: 'Anti demote',
-        antipromote: 'Anti promote',
-        badword: 'Bad word filter',
-        badwordaction: 'Bad word action',
-        badwordwarns: 'Bad word warnings',
-        welcome: 'Welcome',
-        gptdm: 'GPT in DMs',
+      const s = await getSettings();
+      const tog = (v) => (v === 'on' ? '✅ ON' : '❌ OFF');
+      const list = (value) => String(value || '').split(',').map((x) => x.trim()).filter(Boolean);
+      const guard = (key, extra) => {
+        const on = s[key] === 'on';
+        const detail = on && s[key + 'action']
+          ? ` · ${String(s[key + 'action']).toUpperCase()}${s[key + 'warns'] ? ` · ${s[key + 'warns']} warns` : ''}`
+          : '';
+        return `${tog(s[key])}${detail}${extra || ''}`;
       };
-      const show = (value) => {
-        const v = String(value);
-        if (v === 'on') return '🟢 ON';
-        if (v === 'off') return '🔴 OFF';
-        return `🔹 ${v.toUpperCase()}`;
+
+      const sections = {
+        security: {
+          title: '🔒 Security',
+          rows: [
+            ['AntiLink', guard('antilink')],
+            ['AntiLinkAll', guard('antilinkall')],
+            ['AntiLink allowed', `${list(s.antilinkallow).length} domain(s)`],
+            ['BadWord', guard('badword')],
+            ['BadWord list', `${list(s.badwords).length} word(s)`],
+            ['AntiTagAll', guard('antitagall')],
+            ['AntiGroupStatus', guard('antigroupstatus')],
+            ['AntiGroupMention', guard('antigroupmention')],
+            ['AntiTag', tog(s.antitag)],
+            ['AntiBot', tog(s.antibot)],
+            ['AntiCall', tog(s.anticall)],
+            ['AntiDelete', `${s.antidelete === 'off' ? '❌ OFF' : '✅ ' + String(s.antidelete).toUpperCase()}`],
+            ['AntiDemote', tog(s.antidemote)],
+            ['AntiPromote', tog(s.antipromote)],
+          ],
+        },
+        auto: {
+          title: '🤖 Automation',
+          rows: [
+            ['AutoRead', tog(s.autoread)],
+            ['AutoView status', tog(s.autoview)],
+            ['AutoLike status', tog(s.autolike)],
+            ['AutoBio', tog(s.autobio)],
+            ['Welcome', tog(s.welcome)],
+          ],
+        },
+        bot: {
+          title: '💬 Bot behaviour',
+          rows: [
+            ['GPT in DMs', tog(s.gptdm)],
+            ['Mode', `🌐 ${String(s.mode || 'public').toUpperCase()}`],
+            ['Prefix', s.prefix ? `[ ${s.prefix} ]` : 'none'],
+            ['MenuType', `📋 ${String(s.menutype || 'image').toUpperCase()}`],
+            ['Presence', `🟢 ${String(s.wapresence || 'online').toUpperCase()}`],
+            ['Sudo users', String(list(s.sudo).length)],
+          ],
+        },
       };
-      const lines = Object.keys(labels)
-        .filter((key) => settings[key] !== undefined)
-        .map((key) => `• ${labels[key]} (${key}): ${key === 'prefix' ? `[ ${settings[key]} ]` : show(settings[key])}`);
-      const sudoCount = String(settings.sudo || '').split(',').map((n) => n.trim()).filter(Boolean).length;
-      lines.push(`• Sudo users (sudo): ${sudoCount}`);
-      reply(`⚙️ *BOT SETTINGS*\n\n${lines.join('\n')}\n\n_Change one with its command, for example: antilink on_`);
+
+      const known = new Set([
+        'antilink', 'antilinkall', 'antilinkaction', 'antilinkwarns', 'antilinkallow', 'badword', 'badwords', 'badwordaction', 'badwordwarns',
+        'antitagall', 'antitagallaction', 'antitagallwarns', 'antigroupstatus', 'antigroupstatusaction', 'antigroupstatuswarns',
+        'antigroupmention', 'antigroupmentionaction', 'antigroupmentionwarns', 'antitag', 'antibot', 'anticall', 'antidelete', 'antidemote',
+        'antipromote', 'autoread', 'autoview', 'autolike', 'autobio', 'welcome', 'gptdm', 'mode', 'prefix', 'menutype', 'wapresence', 'sudo',
+      ]);
+      const extra = Object.keys(s).filter((key) => !known.has(key));
+      if (extra.length) {
+        sections.other = {
+          title: '🧩 Other',
+          rows: extra.map((key) => [key, String(s[key]).length > 40 ? `${String(s[key]).slice(0, 40)}…` : String(s[key]) || '—']),
+        };
+      }
+
+      const wanted = String(text || '').trim().toLowerCase();
+      const alias = { sec: 'security', protection: 'security', automation: 'auto', behaviour: 'bot', behavior: 'bot' };
+      const pick = alias[wanted] || wanted;
+      if (pick && !sections[pick]) return reply(`Usage: ${prefix}settings [${Object.keys(sections).join('/')}]`);
+
+      const shown = pick ? [pick] : Object.keys(sections);
+      const protections = ['antilink', 'antilinkall', 'badword', 'antitagall', 'antigroupstatus', 'antigroupmention', 'antibot', 'anticall', 'antidemote', 'antipromote'];
+      const active = protections.filter((key) => s[key] === 'on').length + (s.antidelete && s.antidelete !== 'off' ? 1 : 0);
+
+      const out = [
+        '╔══════════════════════╗',
+        '║     ⚙️  BOT SETTINGS',
+        '╚══════════════════════╝',
+        '',
+        `📊 ${active}/${protections.length + 1} protections active`,
+        '',
+      ];
+      for (const name of shown) {
+        const { title, rows } = sections[name];
+        out.push(`*${title}*`);
+        rows.forEach(([label, value], index) => out.push(`${index === rows.length - 1 ? '┗' : '┣'} ${label}: ${value}`));
+        out.push('');
+      }
+      out.push(`_View one section: ${prefix}settings security/auto/bot_`);
+      out.push(`_Change one with its command, e.g. ${prefix}antilink on_`);
+      reply(out.join('\n'));
     },
   },
   {
