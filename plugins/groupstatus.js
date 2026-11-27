@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const { runFfmpeg, tempFile } = require('../lib/sticker');
 const {
   generateWAMessageContent,
   generateWAMessageFromContent,
@@ -19,6 +21,18 @@ function withMediaHint(message, inner) {
   const out = Object.create(hint);
   Object.assign(out, message);
   return out;
+}
+
+async function toVoiceNote(buffer) {
+  const input = tempFile('bin');
+  const output = tempFile('ogg');
+  try {
+    fs.writeFileSync(input, buffer);
+    await runFfmpeg(['-y', '-i', input, '-vn', '-c:a', 'libopus', '-b:a', '48k', '-ar', '48000', '-ac', '1', '-f', 'ogg', output]);
+    return fs.readFileSync(output);
+  } finally {
+    for (const file of [input, output]) fs.rm(file, { force: true }, () => { });
+  }
 }
 
 async function postGroupStatus(client, jid, content) {
@@ -61,7 +75,7 @@ module.exports = [
         if (kind) {
           const buffer = await bufferOf(source);
           if (!buffer) return reply('❌ Could not download that media.');
-          if (kind === 'audio') content = { audio: buffer, mimetype: 'audio/mp4', ptt: false };
+          if (kind === 'audio') content = { audio: await toVoiceNote(buffer), mimetype: 'audio/ogg; codecs=opus', ptt: true };
           else content = { [kind]: buffer, caption };
         } else {
           content = { text: caption };
