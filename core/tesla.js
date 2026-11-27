@@ -13,6 +13,7 @@ const sudoLib = require('./lib/sudo');
 const antideleteLib = require('./lib/antidelete');
 const antilinkLib = require('./lib/antilink');
 const badwordLib = require('./lib/badword');
+const msgGuardLib = require('./lib/msgguard');
 const gamesLib = require('./lib/games');
 const gptdmLib = require('./lib/gptdm');
 const { fetchJson } = require('./lib/dreadfunc');
@@ -247,6 +248,8 @@ await client.sendMessage(from, {text: lod[i], edit: key });
             return DateTime.now().setZone('Africa/Nairobi').toLocaleString(DateTime.TIME_SIMPLE);
         };
 	  
+    if (m.isGroup && await msgGuardLib.check(client, m, { Owner, isAdmin, isBotAdmin, groupMetadata })) return;
+
     if (m.isGroup && badword === 'on') {
       const scanned = [...new Set([body, budy, m.text].filter((part) => typeof part === 'string' && part))].join('\n');
       if (await badwordLib.check(client, m, { text: scanned, Owner, isAdmin, isBotAdmin })) return;
