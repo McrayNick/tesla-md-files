@@ -1,5 +1,6 @@
 const fs = require('fs');
 const axios = require('axios');
+const fetch = require('node-fetch');
 const { fetchJson } = require('../lib/dreadfunc');
 
 const GROQ_DIRECT = 'https://api.groq.com/openai/v1';
