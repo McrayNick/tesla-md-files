@@ -10,6 +10,17 @@ async function bufferOf(source) {
   return Buffer.isBuffer(data) ? data : data ? Buffer.from(data) : null;
 }
 
+const MEDIA_KEYS = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'];
+
+function withMediaHint(message, inner) {
+  const hint = {};
+  for (const key of MEDIA_KEYS) if (inner[key]) hint[key] = inner[key];
+  if (!Object.keys(hint).length) return message;
+  const out = Object.create(hint);
+  Object.assign(out, message);
+  return out;
+}
+
 async function postGroupStatus(client, jid, content) {
   const inner = await generateWAMessageContent(content, { upload: client.waUploadToServer });
   const messageSecret = crypto.randomBytes(32);
@@ -23,7 +34,7 @@ async function postGroupStatus(client, jid, content) {
     },
     { userJid: client.user.id }
   );
-  await client.relayMessage(jid, wrapped.message, { messageId: wrapped.key.id });
+  await client.relayMessage(jid, withMediaHint(wrapped.message, inner), { messageId: wrapped.key.id });
   return wrapped;
 }
 
