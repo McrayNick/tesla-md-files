@@ -55,8 +55,44 @@ const CLOSE_REASONS = {
 };
 const describeClose = (code) => CLOSE_REASONS[code] || `Unknown reason (${code ?? "none"})`;
 
+const DEFAULT_SESSION_API = 'https://kenya-home.onrender.com';
+const SESSION_API_URL = String(process.env.SESSION_API_URL || DEFAULT_SESSION_API).trim().replace(/\/+$/, '');
+const SHORT_KEY = /^[0-9A-Fa-f]{8}$/;
+
+function cleanSession(value) {
+  return String(value || "").trim().replace(/^["']+|["']+$/g, "").trim();
+}
+
+function shortKeyOf(value) {
+  const text = cleanSession(value);
+  const match = text.match(/^[A-Za-z0-9_-]{1,32}:~(.+)$/);
+  const payload = match ? match[1].trim() : text;
+  return SHORT_KEY.test(payload) ? payload.toUpperCase() : null;
+}
+
+async function fetchShortSession(key) {
+  if (!SESSION_API_URL) {
+    throw new Error("SESSION_API_URL is not set. Set it to your session dashboard address (for example https://your-dashboard.onrender.com) or use the full session.");
+  }
+  let response;
+  try {
+    response = await fetch(`${SESSION_API_URL}/api/session/${encodeURIComponent(key)}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (error) {
+    throw new Error(`Could not reach the session dashboard (${error.message || error}).`);
+  }
+  if (response.status === 404) throw new Error(`Session key "${key}" was not found or was revoked. Generate a new session.`);
+  if (response.status === 429) throw new Error("The session dashboard is rate limiting this server. Wait a minute and restart.");
+  if (!response.ok) throw new Error(`The session dashboard answered with an error (${response.status}).`);
+  const data = await response.json();
+  if (!data || !data.creds) throw new Error("The session dashboard returned no session.");
+  return typeof data.creds === "string" ? data.creds : JSON.stringify(data.creds);
+}
+
 function decodeSession(value) {
-  let text = String(value || "").trim().replace(/^["']+|["']+$/g, "").trim();
+  let text = cleanSession(value);
   if (!text) throw new Error("SESSION is empty.");
   text = text.replace(/^[A-Za-z0-9_-]{1,32}:~/, "");
 
@@ -90,7 +126,7 @@ async function authenticationn() {
   if (sessionInitialized) return;
   if (!session) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error("SESSION must be set to a base64-encoded WhatsApp credentials file.");
+      throw new Error("SESSION must be set (a short key like TESLA-MD:~1A2B3C4D or the full base64 session).");
     }
     if (fs.existsSync(credsPath)) {
       sessionInitialized = true;
@@ -99,12 +135,20 @@ async function authenticationn() {
     throw new Error("No WhatsApp session found. Set SESSION before starting the bot.");
   }
 
-  const creds = decodeSession(session);
   const marker = path.join(path.dirname(credsPath), ".session-hash");
   const hash = crypto.createHash("sha256").update(session).digest("hex");
   const sameSession = fs.existsSync(credsPath) && fs.existsSync(marker) && fs.readFileSync(marker, "utf8").trim() === hash;
 
   if (!sameSession) {
+    const key = shortKeyOf(session);
+    let creds;
+    if (key) {
+      console.log("Short session key detected, fetching it from the session dashboard...");
+      creds = decodeSession(await fetchShortSession(key));
+      console.log("Session fetched successfully.");
+    } else {
+      creds = decodeSession(session);
+    }
     fs.mkdirSync(path.dirname(credsPath), { recursive: true });
     fs.writeFileSync(credsPath, creds, { encoding: "utf8", mode: 0o600 });
     fs.writeFileSync(marker, hash, { encoding: "utf8", mode: 0o600 });
