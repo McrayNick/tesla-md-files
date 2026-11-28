@@ -23,17 +23,34 @@ function contextsOf(m) {
   return found;
 }
 
+function textOf(m) {
+  const parts = [m.text, m.body];
+  const walk = (node, depth) => {
+    if (!node || typeof node !== 'object' || depth > 4) return;
+    for (const key of ['text', 'caption', 'conversation']) if (typeof node[key] === 'string') parts.push(node[key]);
+    for (const key of Object.keys(node)) {
+      const child = node[key];
+      if (child && typeof child === 'object' && !Buffer.isBuffer(child)) walk(child, depth + 1);
+    }
+  };
+  walk(m.message, 0);
+  return parts.filter((part) => typeof part === 'string').join('\n');
+}
+
 function mentionCount(m) {
   const ids = new Set();
+  let everyone = 0;
   for (const ctx of contextsOf(m)) {
     for (const jid of ctx.mentionedJid || []) ids.add(String(jid));
+    everyone = Math.max(everyone, Number(ctx.nonJidMentions) || 0);
   }
-  return ids.size;
+  const typed = new Set((textOf(m).match(/@\d{6,}/g) || []));
+  return { listed: ids.size, typed: typed.size, everyone, total: Math.max(ids.size, typed.size) };
 }
 
 function tagLimit(groupMetadata) {
   const size = groupMetadata && Array.isArray(groupMetadata.participants) ? groupMetadata.participants.length : 0;
-  return Math.max(5, Math.ceil(size * 0.6));
+  return Math.max(5, Math.ceil(size * 0.5));
 }
 
 function findKeys(node, depth = 0, found = new Set(), seen = new Set()) {
@@ -65,6 +82,12 @@ async function check(client, m, ctx) {
   try {
     if (!m.isGroup || m.fromMe) return false;
     const { Owner, isAdmin, isBotAdmin, groupMetadata } = ctx;
+    if (hasType(m, STATUS_TYPES)) {
+      const live = await getSettings();
+      if (live.autoview === 'on' && typeof client.readMessages === 'function') {
+        client.readMessages([m.key]).catch((error) => console.log('Group status view failed:', error.message || error));
+      }
+    }
     if (process.env.GUARD_DEBUG) {
       const keys = [...findKeys(m.message)];
       if (keys.some((key) => /status|mention/i.test(key))) {
@@ -100,8 +123,12 @@ async function check(client, m, ctx) {
     }
 
     if (settings.antitagall === 'on') {
-      const count = mentionCount(m);
-      if (count >= tagLimit(groupMetadata)) {
+      const counts = mentionCount(m);
+      const limit = tagLimit(groupMetadata);
+      if (process.env.GUARD_DEBUG && (counts.total || counts.everyone)) {
+        console.log('[msgguard] tagall', JSON.stringify({ ...counts, limit, members: groupMetadata && groupMetadata.participants ? groupMetadata.participants.length : 0 }));
+      }
+      if (counts.total >= limit || counts.everyone > 0) {
         return await moderation.enforce(client, m, {
           bucket: 'tagall',
           title: '🚫 *ANTI TAG ALL*',
